@@ -1,0 +1,253 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "A comprehensive API for network asset discovery, port scanning, and credential testing",
+        "title": "RedMantis Network Discovery API",
+        "termsOfService": "http://swagger.io/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://www.swagger.io/support",
+            "email": "support@swagger.io"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/assets": {
+            "get": {
+                "description": "Retrieve a paginated list of all discovered network assets with optional filtering",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "Get paginated list of assets",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 10,
+                        "description": "Number of assets per page (default: 10)",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved assets",
+                        "schema": {
+                            "$ref": "#/definitions/main.AssetList"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/main.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/assets/{ip}": {
+            "get": {
+                "description": "Retrieve detailed information about a specific network asset by its IP address",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assets"
+                ],
+                "summary": "Get asset by IP address",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "10.1.1.13",
+                        "description": "IP address of the asset",
+                        "name": "ip",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved asset",
+                        "schema": {
+                            "$ref": "#/definitions/main.Asset"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid IP address format",
+                        "schema": {
+                            "$ref": "#/definitions/main.Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Asset not found",
+                        "schema": {
+                            "$ref": "#/definitions/main.Error"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "main.Asset": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "10.1.1.13"
+                },
+                "credential_tests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.CredTest"
+                    }
+                },
+                "date": {
+                    "type": "string",
+                    "example": "2025-09-26T11:24:47.994799+04:00"
+                },
+                "hardware": {
+                    "type": "string",
+                    "example": "unknown"
+                },
+                "hostname": {
+                    "type": "string",
+                    "example": "cavads-MacBook-Pro.local."
+                },
+                "mac": {
+                    "type": "string",
+                    "example": "e2:0f:5c:18:7f:af"
+                },
+                "mac_vendor": {
+                    "type": "string",
+                    "example": "unknown"
+                },
+                "os": {
+                    "type": "string",
+                    "example": "unknown"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.Port"
+                    }
+                },
+                "screenshot": {
+                    "type": "string",
+                    "example": ""
+                },
+                "type": {
+                    "type": "string",
+                    "example": "unknown"
+                }
+            }
+        },
+        "main.AssetList": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.Asset"
+                    }
+                },
+                "page_size": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "total_assets": {
+                    "type": "integer",
+                    "example": 21
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "main.CredTest": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "example": "postgres"
+                },
+                "service": {
+                    "type": "string",
+                    "example": "postgresql"
+                },
+                "success": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "username": {
+                    "type": "string",
+                    "example": "postgres"
+                }
+            }
+        },
+        "main.Error": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Asset not found"
+                }
+            }
+        },
+        "main.Port": {
+            "type": "object",
+            "properties": {
+                "banner": {
+                    "type": "string",
+                    "example": "MySQL 8.0.43"
+                },
+                "number": {
+                    "type": "integer",
+                    "example": 3306
+                },
+                "service": {
+                    "type": "string",
+                    "example": "MySQL 8.0.43"
+                },
+                "state": {
+                    "type": "string",
+                    "example": "open"
+                },
+                "transport": {
+                    "type": "string",
+                    "example": "tcp"
+                }
+            }
+        }
+    }
+}

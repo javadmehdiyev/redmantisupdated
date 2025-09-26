@@ -1,0 +1,179 @@
+basePath: /
+definitions:
+  main.Asset:
+    properties:
+      address:
+        example: 10.1.1.13
+        type: string
+      credential_tests:
+        items:
+          $ref: '#/definitions/main.CredTest'
+        type: array
+      date:
+        example: "2025-09-26T11:24:47.994799+04:00"
+        type: string
+      hardware:
+        example: unknown
+        type: string
+      hostname:
+        example: cavads-MacBook-Pro.local.
+        type: string
+      mac:
+        example: e2:0f:5c:18:7f:af
+        type: string
+      mac_vendor:
+        example: unknown
+        type: string
+      os:
+        example: unknown
+        type: string
+      ports:
+        items:
+          $ref: '#/definitions/main.Port'
+        type: array
+      screenshot:
+        example: ""
+        type: string
+      type:
+        example: unknown
+        type: string
+    type: object
+  main.AssetList:
+    properties:
+      current_page:
+        example: 1
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/main.Asset'
+        type: array
+      page_size:
+        example: 10
+        type: integer
+      total_assets:
+        example: 21
+        type: integer
+      total_pages:
+        example: 3
+        type: integer
+    type: object
+  main.CredTest:
+    properties:
+      password:
+        example: postgres
+        type: string
+      service:
+        example: postgresql
+        type: string
+      success:
+        example: true
+        type: boolean
+      username:
+        example: postgres
+        type: string
+    type: object
+  main.Error:
+    properties:
+      message:
+        example: Asset not found
+        type: string
+    type: object
+  main.Port:
+    properties:
+      banner:
+        example: MySQL 8.0.43
+        type: string
+      number:
+        example: 3306
+        type: integer
+      service:
+        example: MySQL 8.0.43
+        type: string
+      state:
+        example: open
+        type: string
+      transport:
+        example: tcp
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: A comprehensive API for network asset discovery, port scanning, and
+    credential testing
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: RedMantis Network Discovery API
+  version: "1.0"
+paths:
+  /assets:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a paginated list of all discovered network assets with
+        optional filtering
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 'Number of assets per page (default: 10)'
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved assets
+          schema:
+            $ref: '#/definitions/main.AssetList'
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/main.Error'
+      summary: Get paginated list of assets
+      tags:
+      - assets
+  /assets/{ip}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve detailed information about a specific network asset by
+        its IP address
+      parameters:
+      - description: IP address of the asset
+        example: 10.1.1.13
+        in: path
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved asset
+          schema:
+            $ref: '#/definitions/main.Asset'
+        "400":
+          description: Invalid IP address format
+          schema:
+            $ref: '#/definitions/main.Error'
+        "404":
+          description: Asset not found
+          schema:
+            $ref: '#/definitions/main.Error'
+      summary: Get asset by IP address
+      tags:
+      - assets
+schemes:
+- http
+- https
+swagger: "2.0"
