@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -315,6 +316,128 @@ func performARPScan(hosts []Host, iface NetworkInfo, timeout time.Duration) (Arp
 	}, nil
 }
 
+// LoadHostsFromFile loads hosts from a text file containing IP addresses and CIDR ranges
+// Each line can contain either an IP address or a CIDR range
+// Lines starting with # are treated as comments and ignored
+func LoadHostsFromFile(filename string) ([]Host, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	var hosts []Host
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Check if it's a CIDR range
+		if strings.Contains(line, "/") {
+			cidrHosts, err := expandCIDR(line)
+			if err != nil {
+				fmt.Printf("Warning: Invalid CIDR on line %d: %s (%v)\n", lineNum, line, err)
+				continue
+			}
+			hosts = append(hosts, cidrHosts...)
+		} else {
+			// Treat as individual IP address
+			if ip := net.ParseIP(line); ip != nil {
+				hosts = append(hosts, Host{IPAddress: line})
+			} else {
+				fmt.Printf("Warning: Invalid IP address on line %d: %s\n", lineNum, line)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file %s: %w", filename, err)
+	}
+
+	return hosts, nil
+}
+
+// expandCIDR expands a CIDR range into individual Host entries
+func expandCIDR(cidr string) ([]Host, error) {
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid CIDR: %w", err)
+	}
+
+	// Get the IP and mask
+	ip := ipNet.IP.To4()
+	if ip == nil {
+		return nil, fmt.Errorf("not an IPv4 network: %s", cidr)
+	}
+
+	mask := ipNet.Mask
+	ones, bits := mask.Size()
+
+	// Calculate number of hosts (excluding network and broadcast for normal networks)
+	numHostBits := bits - ones
+	if numHostBits > 16 { // Limit to avoid memory issues with huge ranges like /8
+		return nil, fmt.Errorf("CIDR range too large (more than /16): %s", cidr)
+	}
+
+	var hosts []Host
+
+	// Handle special cases
+	if ones >= 31 {
+		// /31 and /32 networks - use all addresses
+		hosts = append(hosts, Host{IPAddress: ipNet.IP.String()})
+		if ones == 31 {
+			// For /31, add the other address too
+			nextIP := make(net.IP, len(ipNet.IP))
+			copy(nextIP, ipNet.IP)
+			nextIP[3]++
+			hosts = append(hosts, Host{IPAddress: nextIP.String()})
+		}
+		return hosts, nil
+	}
+
+	// Convert IP to uint32 for easier manipulation
+	ipUint := uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+	maskUint := uint32(mask[0])<<24 | uint32(mask[1])<<16 | uint32(mask[2])<<8 | uint32(mask[3])
+	networkUint := ipUint & maskUint
+
+	// Generate all host addresses (skip network and broadcast)
+	numHosts := (1 << numHostBits) - 2 // Exclude network and broadcast
+	for i := 1; i <= numHosts; i++ {
+		hostUint := networkUint + uint32(i)
+		hostIP := net.IPv4(
+			byte(hostUint>>24),
+			byte(hostUint>>16),
+			byte(hostUint>>8),
+			byte(hostUint),
+		)
+		hosts = append(hosts, Host{IPAddress: hostIP.String()})
+	}
+
+	return hosts, nil
+}
+
+// removeDuplicateHosts removes duplicate hosts based on IP address
+func removeDuplicateHosts(hosts []Host) []Host {
+	seen := make(map[string]bool)
+	var unique []Host
+
+	for _, host := range hosts {
+		if !seen[host.IPAddress] {
+			seen[host.IPAddress] = true
+			unique = append(unique, host)
+		}
+	}
+
+	return unique
+}
+
 // performCredentialScan performs credential testing for a specific host and port
 // Technique: Sends HTTP POST request to credential scanner API with host and port information
 // Implements timeout handling and error recovery for robust credential testing
@@ -507,23 +630,93 @@ func performComprehensiveCredentialScan(assets []Asset, apiURL string) map[strin
 // Technique: Combines passive discovery, ARP scanning, ICMP pings, TCP/SYN scans, and port scanning.
 // Implements parallel processing and progressive scanning techniques for maximum host discovery.
 // Exports results to JSON format for further analysis and API consumption.
-func ScanHosts() {
-	interfaces, err := GetNetworkInterfaces()
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+func ScanHosts(config *Config) {
+	// Get network interface based on configuration
+	var primary NetworkInfo
+
+	if config.Network.Interface == "auto" && config.Network.AutoDetectLocal {
+		// Auto-detect primary interface
+		interfaces, err := GetNetworkInterfaces()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return
+		}
+		primary = GetPrimaryNetworkInterface(interfaces)
+		fmt.Printf("Auto-detected network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
+	} else if config.Network.Interface != "auto" {
+		// Use specified interface
+		interfaces, err := GetNetworkInterfaces()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return
+		}
+
+		// Find the specified interface
+		found := false
+		for _, iface := range interfaces {
+			if iface.InterfaceName == config.Network.Interface {
+				primary = iface
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			fmt.Printf("Error: Specified interface '%s' not found\n", config.Network.Interface)
+			fmt.Println("Available interfaces:")
+			for _, iface := range interfaces {
+				fmt.Printf("  - %s (%s)\n", iface.InterfaceName, iface.IPAddress)
+			}
+			return
+		}
+
+		fmt.Printf("Using specified network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
+	} else {
+		// Fallback to auto-detection
+		interfaces, err := GetNetworkInterfaces()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return
+		}
+		primary = GetPrimaryNetworkInterface(interfaces)
+		fmt.Printf("Using network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
+	}
+
+	// Initialize host lists
+	var allHosts []Host
+
+	// Add network-based hosts if enabled
+	if config.Network.ScanLocalNetwork {
+		networkHosts, err := GetAllHostsInNetwork(primary.NetworkCIDR)
+		if err != nil {
+			fmt.Printf("Error getting hosts from network %s: %v\n", primary.NetworkCIDR, err)
+		} else {
+			allHosts = append(allHosts, networkHosts...)
+			fmt.Printf("Added %d hosts from network %s\n", len(networkHosts), primary.NetworkCIDR)
+		}
+	}
+
+	// Add file-based hosts if enabled
+	if config.Network.ScanFileList && config.Files.IPListFile != "" {
+		fmt.Printf("Loading hosts from file: %s\n", config.Files.IPListFile)
+		fileHosts, err := LoadHostsFromFile(config.Files.IPListFile)
+		if err != nil {
+			fmt.Printf("Warning: Could not load hosts from %s: %v\n", config.Files.IPListFile, err)
+		} else {
+			allHosts = append(allHosts, fileHosts...)
+			fmt.Printf("Added %d hosts from file %s\n", len(fileHosts), config.Files.IPListFile)
+		}
+	}
+
+	// Remove duplicates
+	hosts := removeDuplicateHosts(allHosts)
+
+	if len(hosts) == 0 {
+		fmt.Println("No hosts to scan. Check configuration settings.")
 		return
 	}
 
-	primary := GetPrimaryNetworkInterface(interfaces)
-	fmt.Printf("Using network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
-
-	hosts, err := GetAllHostsInNetwork(primary.NetworkCIDR)
-	if err != nil {
-		fmt.Printf("Error getting hosts: %v\n", err)
-		return
-	}
-
-	fmt.Printf("Scanning %d hosts on network %s...\n", len(hosts), primary.NetworkCIDR)
+	fmt.Printf("Scanning %d unique hosts total...\n", len(hosts))
 	fmt.Println("Starting comprehensive multi-technique scanning for better host discovery...")
 
 	fmt.Println("\n=== Phase 0: Passive Network Discovery ===")
@@ -549,12 +742,29 @@ func ScanHosts() {
 	fmt.Printf("Passive discovery found %d hosts\n", passiveHostCount)
 
 	fmt.Println("\n=== Phase 1: ARP Scanning ===")
-	arpResults, err := performARPScan(hosts, primary, 5*time.Second)
-	if err != nil {
-		fmt.Printf("Error during ARP scan: %v\n", err)
-		return
+
+	var arpResults ArpScanResults
+
+	if !config.ARP.Enabled {
+		fmt.Println("ARP scanning is disabled in configuration, skipping...")
+		// Create empty results for consistency
+		arpResults = ArpScanResults{
+			Hosts:    make([]HostStatus, 0),
+			Duration: 0,
+		}
+	} else {
+		fmt.Printf("ARP scan configuration: timeout=%s, workers=%d, rate_limit=%s\n",
+			config.ARP.Timeout, config.ARP.Workers, config.ARP.RateLimit)
+
+		var err error
+		arpResults, err = performARPScan(hosts, primary, config.GetARPTimeout())
+		if err != nil {
+			fmt.Printf("Error during ARP scan: %v\n", err)
+			return
+		}
 	}
 
+	// Calculate ARP alive count for both enabled/disabled cases
 	arpAliveCount := 0
 	for _, host := range arpResults.Hosts {
 		if host.IsAlive {
@@ -562,7 +772,9 @@ func ScanHosts() {
 		}
 	}
 
-	fmt.Printf("\nARP scan found %d alive hosts\n", arpAliveCount)
+	if config.ARP.Enabled {
+		fmt.Printf("\nARP scan found %d alive hosts\n", arpAliveCount)
+	}
 
 	fmt.Println("\n=== Phase 2: ICMP Ping Scanning ===")
 	pingResults, err := performPingScan(hosts)
@@ -585,57 +797,66 @@ func ScanHosts() {
 	finalHosts := MergePassiveAndActiveResults(passiveResults, activeScannedHosts, primary.NetworkCIDR)
 
 	fmt.Println("\n=== Phase 5: Advanced Port Scanning ===")
-	fmt.Println("Performing comprehensive port scanning on discovered hosts...")
-
-	// Get alive hosts for port scanning
-	var aliveHosts []HostStatus
-	for _, host := range finalHosts {
-		if host.IsAlive {
-			aliveHosts = append(aliveHosts, host)
-		}
-	}
 
 	var portScanResults map[string][]PortScanResult
-	if len(aliveHosts) > 0 {
-		// Convert HostStatus to net.IP for PortScanner
-		var ips []net.IP
-		for _, host := range aliveHosts {
-			if ip := net.ParseIP(host.IPAddress); ip != nil {
-				ips = append(ips, ip)
-			}
-		}
 
-		// Perform port scanning
-		portResults := PortScanner(ips)
-
-		// Convert PortResult to PortScanResult format
+	if !config.PortScan.Enabled {
+		fmt.Println("Port scanning is disabled in configuration, skipping...")
 		portScanResults = make(map[string][]PortScanResult)
-		for _, result := range portResults {
-			if result.State { // Only include open ports
-				portScanResult := PortScanResult{
-					Number:    result.Port,
-					Service:   result.Service,
-					Banner:    result.Banner,
-					State:     "open",
-					Transport: result.Protocol,
-				}
-				portScanResults[result.IPAddress.String()] = append(portScanResults[result.IPAddress.String()], portScanResult)
-			}
-		}
-
-		// Display port scanning summary
-		totalOpenPorts := 0
-		hostsWithOpenPorts := 0
-		for _, ports := range portScanResults {
-			if len(ports) > 0 {
-				hostsWithOpenPorts++
-				totalOpenPorts += len(ports)
-			}
-		}
-		fmt.Printf("Port scan completed: Found %d open ports on %d hosts\n", totalOpenPorts, hostsWithOpenPorts)
 	} else {
-		fmt.Println("No alive hosts found for port scanning")
-		portScanResults = make(map[string][]PortScanResult)
+		fmt.Printf("Port scan configuration: timeout=%s, workers=%d\n",
+			config.PortScan.Timeout, config.PortScan.Workers)
+		fmt.Println("Performing comprehensive port scanning on discovered hosts...")
+
+		// Get alive hosts for port scanning
+		var aliveHosts []HostStatus
+		for _, host := range finalHosts {
+			if host.IsAlive {
+				aliveHosts = append(aliveHosts, host)
+			}
+		}
+
+		if len(aliveHosts) > 0 {
+			// Convert HostStatus to net.IP for PortScanner
+			var ips []net.IP
+			for _, host := range aliveHosts {
+				if ip := net.ParseIP(host.IPAddress); ip != nil {
+					ips = append(ips, ip)
+				}
+			}
+
+			// Perform port scanning
+			portResults := PortScanner(ips)
+
+			// Convert PortResult to PortScanResult format
+			portScanResults = make(map[string][]PortScanResult)
+			for _, result := range portResults {
+				if result.State { // Only include open ports
+					portScanResult := PortScanResult{
+						Number:    result.Port,
+						Service:   result.Service,
+						Banner:    result.Banner,
+						State:     "open",
+						Transport: result.Protocol,
+					}
+					portScanResults[result.IPAddress.String()] = append(portScanResults[result.IPAddress.String()], portScanResult)
+				}
+			}
+
+			// Display port scanning summary
+			totalOpenPorts := 0
+			hostsWithOpenPorts := 0
+			for _, ports := range portScanResults {
+				if len(ports) > 0 {
+					hostsWithOpenPorts++
+					totalOpenPorts += len(ports)
+				}
+			}
+			fmt.Printf("Port scan completed: Found %d open ports on %d hosts\n", totalOpenPorts, hostsWithOpenPorts)
+		} else {
+			fmt.Println("No alive hosts found for port scanning")
+			portScanResults = make(map[string][]PortScanResult)
+		}
 	}
 
 	// Credential scanner API URL - can be configured via environment variable
@@ -763,7 +984,7 @@ func ScanHosts() {
 			fmt.Printf("... and %d more assets\n", len(finalAssets)-5)
 		}
 
-		err := exportAssetsToJSON(finalAssets)
+		err := exportAssetsToJSON(finalAssets, config)
 		if err != nil {
 			fmt.Printf("Error exporting to JSON: %v\n", err)
 		}
@@ -975,29 +1196,34 @@ func mergeAllResults(hosts []HostStatus, portResults map[string][]PortScanResult
 }
 
 // exportAssetsToJSON serializes asset inventory to JSON format for external consumption.
-// Technique: Marshals asset array to indented JSON and writes to results.json file.
+// Technique: Marshals asset array to indented JSON and writes to configured output file.
 // Implements error handling for file operations and provides export statistics.
 // Returns error if JSON marshaling or file writing fails.
-func exportAssetsToJSON(assets []Asset) error {
-	fmt.Println("\n💾 Exporting assets to results.json...")
+func exportAssetsToJSON(assets []Asset, config *Config) error {
+	outputFile := config.Files.OutputFile
+	if outputFile == "" {
+		outputFile = "assets.json" // Default fallback
+	}
+
+	fmt.Printf("\n💾 Exporting assets to %s...\n", outputFile)
 
 	jsonData, err := json.MarshalIndent(assets, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal assets to JSON: %w", err)
 	}
 
-	file, err := os.Create("results.json")
+	file, err := os.Create(outputFile)
 	if err != nil {
-		return fmt.Errorf("failed to create results.json: %w", err)
+		return fmt.Errorf("failed to create %s: %w", outputFile, err)
 	}
 	defer file.Close()
 
 	_, err = file.Write(jsonData)
 	if err != nil {
-		return fmt.Errorf("failed to write to results.json: %w", err)
+		return fmt.Errorf("failed to write to %s: %w", outputFile, err)
 	}
 
-	fmt.Printf("Successfully exported %d assets to results.json\n", len(assets))
+	fmt.Printf("Successfully exported %d assets to %s\n", len(assets), outputFile)
 	fmt.Printf("File size: %d bytes\n", len(jsonData))
 
 	return nil

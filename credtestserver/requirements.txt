@@ -1,0 +1,28 @@
+# Web Framework
+Flask>=2.3.0
+
+# SSH Testing
+paramiko>=3.0.0
+
+# SMB Testing
+pysmb>=1.2.9
+
+# Redis Testing
+redis>=4.5.0
+
+# MongoDB Testing
+pymongo>=4.3.0
+
+# PostgreSQL Testing
+psycopg2-binary>=2.9.0
+
+# MySQL Testing
+PyMySQL>=1.0.0
+
+# MSSQL Testing
+pyodbc>=4.0.0
+
+# Oracle Testing
+cx_Oracle>=8.3.0
+
+

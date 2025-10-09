@@ -1,0 +1,30 @@
+{
+    "service": {
+        "name": "Asset Management Service",
+        "run_as_daemon": true,
+        "scan_interval": "5m",
+        "auto_start": true
+    },
+    "network": {
+        "interface": "auto",
+        "auto_detect_local": true,
+        "default_cidr": "192.168.123.0/24",
+        "scan_local_network": true,
+        "scan_file_list": true
+    },
+    "arp": {
+        "enabled": true,
+        "timeout": "2s",
+        "workers": 200,
+        "rate_limit": "50ms"
+    },
+    "port_scan": {
+        "enabled": true,
+        "timeout": "2s",
+        "workers": 20
+    },
+    "files": {
+        "ip_list_file": "list.txt",
+        "output_file": "assets.json"
+    }
+}

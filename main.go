@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 )
 
 func main() {
@@ -10,6 +11,21 @@ func main() {
 	fmt.Println("==============================")
 	fmt.Println()
 
-	// Perform ARP scan to get MAC addresses and alive status
-	ScanHosts()
+	// Load configuration
+	config, err := LoadConfig("config.json")
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		fmt.Println("Please ensure config.json exists and is properly formatted")
+		os.Exit(1)
+	}
+
+	fmt.Printf("Loaded configuration for: %s\n", config.Service.Name)
+	fmt.Printf("Network interface mode: %s\n", config.Network.Interface)
+	if config.Network.AutoDetectLocal {
+		fmt.Println("Auto-detecting local network configuration...")
+	}
+	fmt.Println()
+
+	// Perform comprehensive network scanning using configuration
+	ScanHosts(config)
 }
