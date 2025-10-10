@@ -9,7 +9,9 @@ import logging
 import ssl
 import json
 import subprocess
-from typing import List, Dict, Any
+import re
+import os
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 from flask import Flask, request, jsonify
 
@@ -88,8 +90,18 @@ class CredentialTest:
     password: str
     success: bool
 
+@dataclass
+class ServiceDetectionResult:
+    service: str
+    confidence: int
+    version: Optional[str] = None
+    description: Optional[str] = None
+
 class DefaultCredentialScanner:
     def __init__(self):
+        # Load service detection configuration
+        self.service_config = self._load_service_config()
+        
         # Yaygın default credential'lar
         self.default_credentials = {
             'ssh': [
@@ -143,56 +155,135 @@ class DefaultCredentialScanner:
             ]
         }
 
-    def detect_service(self, ip: str, port: int) -> str:
-        """Port numarasına göre servisi tespit et"""
-        service_ports = {
-            21: 'ftp',
-            22: 'ssh',
-            139: 'smb',
-            445: 'smb',
-            1433: 'mssql',
-            1521: 'oracle',
-            3306: 'mysql',
-            3389: 'rdp',
-            5432: 'postgresql',
-            6379: 'redis',
-            27017: 'mongodb'
-        }
-        
-        # Önce port numarasına göre tahmin et
-        detected = service_ports.get(port, None)
-        if detected:
-            return detected
+    def _load_service_config(self) -> Dict:
+        """Load service detection configuration from JSON file"""
+        try:
+            # Look for config file in the parent directory (relative to this script)
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'service-detection-config.json')
             
-        # Banner grabbing ile servisi tespit etmeye çalış
+            if not os.path.exists(config_path):
+                logger.warning(f"Service detection config not found at {config_path}, using fallback")
+                return self._get_fallback_config()
+                
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading service config: {e}, using fallback")
+            return self._get_fallback_config()
+    
+    def _get_fallback_config(self) -> Dict:
+        """Fallback service configuration if JSON file is not available"""
+        return {
+            "service_patterns": {},
+            "port_service_mapping": {
+                "21": "ftp", "22": "ssh", "139": "smb", "445": "smb",
+                "1433": "mssql", "1521": "oracle", "3306": "mysql",
+                "3389": "rdp", "5432": "postgresql", "6379": "redis", "27017": "mongodb"
+            },
+            "service_aliases": {"mariadb": "mysql", "postgres": "postgresql"}
+        }
+
+    def detect_service_with_confidence(self, ip: str, port: int, banner: str = None) -> ServiceDetectionResult:
+        """Intelligent service detection using regex patterns and port mapping"""
+        # Get banner if not provided
+        if banner is None:
+            banner = self._grab_banner(ip, port)
+        
+        best_match = None
+        highest_confidence = 0
+        
+        # Try regex-based detection first (higher accuracy)
+        if banner and len(banner.strip()) > 0:
+            for service_name, service_data in self.service_config.get("service_patterns", {}).items():
+                for pattern_data in service_data.get("patterns", []):
+                    try:
+                        match = re.search(pattern_data["regex"], banner)
+                        if match:
+                            confidence = pattern_data["confidence"]
+                            version = None
+                            
+                            # Extract version if available in match groups
+                            # Look for a version number in any of the captured groups
+                            version = None
+                            if len(match.groups()) > 0:
+                                for group in match.groups():
+                                    if group and re.match(r'^[\d\.][\d\.\-\w]*$', group):
+                                        # Clean up version number (remove trailing hyphens, etc.)
+                                        version = re.sub(r'[-]+$', '', group)
+                                        break
+                                # If no version pattern found, use first group as fallback
+                                if not version:
+                                    version = match.group(1)
+                                    if version:
+                                        version = re.sub(r'[-]+$', '', version)
+                            
+                            if confidence > highest_confidence:
+                                credential_service = service_data.get("credential_service", service_name)
+                                best_match = ServiceDetectionResult(
+                                    service=credential_service,
+                                    confidence=confidence,
+                                    version=version,
+                                    description=pattern_data.get("description", "")
+                                )
+                                highest_confidence = confidence
+                    except re.error as e:
+                        logger.warning(f"Regex error for {service_name}: {e}")
+                        continue
+        
+        # If no high-confidence match, try port-based detection
+        if highest_confidence < 85:
+            port_service = self.service_config.get("port_service_mapping", {}).get(str(port))
+            if port_service:
+                # Apply service aliases
+                port_service = self.service_config.get("service_aliases", {}).get(port_service, port_service)
+                if best_match is None or best_match.confidence < 70:
+                    best_match = ServiceDetectionResult(
+                        service=port_service,
+                        confidence=70,
+                        description="Port-based detection"
+                    )
+        
+        # Return best match or unknown service
+        if best_match:
+            return best_match
+        else:
+            return ServiceDetectionResult(
+                service="unknown",
+                confidence=0,
+                description="Could not detect service"
+            )
+
+    def _grab_banner(self, ip: str, port: int) -> str:
+        """Grab banner from service for detection"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             result = sock.connect_ex((ip, port))
             
             if result == 0:
-                sock.send(b'\r\n')
-                banner = sock.recv(1024).decode('utf-8', errors='ignore').lower()
-                sock.close()
+                # Different banner grabbing strategies for different port ranges
+                if port in [21, 25, 110, 143, 220]:  # Services that send greeting
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                elif port in [22]:  # SSH
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                elif port in [80, 443, 8080, 8443]:  # HTTP services
+                    sock.send(b'HEAD / HTTP/1.1\r\nHost: ' + ip.encode() + b'\r\n\r\n')
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                else:  # Generic banner grab
+                    sock.send(b'\r\n')
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
                 
-                if 'ssh' in banner:
-                    return 'ssh'
-                elif 'ftp' in banner:
-                    return 'ftp'
-                elif 'mysql' in banner:
-                    return 'mysql'
-                elif 'postgresql' in banner:
-                    return 'postgresql'
-                elif 'microsoft' in banner:
-                    return 'mssql'
-                elif 'redis' in banner:
-                    return 'redis'
-                elif 'mongodb' in banner:
-                    return 'mongodb'
-        except:
-            pass
-            
-        return 'unknown'
+                sock.close()
+                return banner
+        except Exception as e:
+            logger.debug(f"Banner grab failed for {ip}:{port} - {e}")
+        
+        return ""
+
+    def detect_service(self, ip: str, port: int) -> str:
+        """Legacy method for backward compatibility"""
+        result = self.detect_service_with_confidence(ip, port)
+        return result.service
 
     def test_ssh(self, ip: str, port: int, username: str, password: str) -> bool:
         """SSH bağlantısını test et"""
@@ -406,9 +497,18 @@ def scan_endpoint():
         successful_results = [result for result in results if result.success]
         json_results = [asdict(result) for result in successful_results]
         
+        # Get detailed service detection info
+        detection_result = scanner.detect_service_with_confidence(ip, int(port))
+        
         return jsonify({
             'target': f"{ip}:{port}",
-            'service': service or scanner.detect_service(ip, int(port)),
+            'service': service or detection_result.service,
+            'detection': {
+                'service': detection_result.service,
+                'confidence': detection_result.confidence,
+                'version': detection_result.version,
+                'description': detection_result.description
+            },
             'results': json_results,
             'summary': {
                 'total_tests': len(results),

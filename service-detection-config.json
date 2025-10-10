@@ -1,0 +1,479 @@
+{
+  "service_patterns": {
+    "ssh": {
+      "credential_service": "ssh",
+      "patterns": [
+        {
+          "regex": "(?i)ssh-2\\.0-openssh[_\\-]?([\\d\\.\\w]+)",
+          "confidence": 95,
+          "description": "OpenSSH with version"
+        },
+        {
+          "regex": "(?i)ssh-2\\.0-dropbear[_\\-]?([\\d\\.]+)",
+          "confidence": 95,
+          "description": "Dropbear SSH with version"
+        },
+        {
+          "regex": "(?i)openssh[_\\-]?([\\d\\.]+[\\w]*)",
+          "confidence": 95,
+          "description": "OpenSSH specific"
+        },
+        {
+          "regex": "(?i)dropbear[_\\-]?([\\d\\.]+)",
+          "confidence": 95,
+          "description": "Dropbear SSH"
+        },
+        {
+          "regex": "(?i)ssh[-\\s]?(?:2\\.0)?[-\\s]?(openssh|dropbear|libssh)",
+          "confidence": 85,
+          "description": "SSH server implementations"
+        }
+      ]
+    },
+    "ftp": {
+      "credential_service": "ftp",
+      "patterns": [
+        {
+          "regex": "(?i)220\\s+\\([\\w]*ftpd\\s+([\\d\\.]+)\\)",
+          "confidence": 95,
+          "description": "FTP server with version in parentheses"
+        },
+        {
+          "regex": "(?i)220\\s+(\\w*ftpd)\\s+([\\d\\.]+)",
+          "confidence": 95,
+          "description": "FTP server with version"
+        },
+        {
+          "regex": "(?i)(vsftpd|proftpd|pureftpd|filezilla|serv-u|wu-ftpd|ncftpd)\\s+([\\d\\.]+)",
+          "confidence": 95,
+          "description": "Specific FTP implementations with version"
+        },
+        {
+          "regex": "(?i)microsoft\\s+ftp\\s+service",
+          "confidence": 95,
+          "description": "Microsoft FTP Service"
+        },
+        {
+          "regex": "(?i)220[-\\s].*(?:ftp|file\\s+transfer)",
+          "confidence": 80,
+          "description": "FTP greeting banner"
+        }
+      ]
+    },
+    "mysql": {
+      "credential_service": "mysql",
+      "patterns": [
+        {
+          "regex": "(?i)([\\d\\.\\-]+)[-\\s]?.*?(mysql|mariadb|percona)",
+          "confidence": 95,
+          "description": "MySQL family databases with version first"
+        },
+        {
+          "regex": "(?i)(mysql|mariadb|percona)[-\\s]?(?:server)?[-\\s]?([\\d\\.\\-]+)",
+          "confidence": 95,
+          "description": "MySQL family databases with service first"
+        },
+        {
+          "regex": "(?i)\\b(5\\.[0-7]\\.[0-9]+).*mysql",
+          "confidence": 90,
+          "description": "MySQL version pattern"
+        },
+        {
+          "regex": "(?i)\\b(10\\.[0-9]+\\.[0-9]+).*mariadb",
+          "confidence": 95,
+          "description": "MariaDB version pattern"
+        },
+        {
+          "regex": "(?i)\\b([58]\\.[0-9]+\\.[0-9]+).*percona",
+          "confidence": 95,
+          "description": "Percona Server version"
+        },
+        {
+          "regex": "(?i)aurora.*mysql",
+          "confidence": 90,
+          "description": "Amazon Aurora MySQL"
+        }
+      ]
+    },
+    "postgresql": {
+      "credential_service": "postgresql",
+      "patterns": [
+        {
+          "regex": "(?i)postgresql\\s+([\\d\\.]+)",
+          "confidence": 95,
+          "description": "PostgreSQL with version"
+        },
+        {
+          "regex": "(?i)\\b([\\d\\.]+).*(?:postgresql|postgres)",
+          "confidence": 90,
+          "description": "PostgreSQL version pattern"
+        },
+        {
+          "regex": "(?i)cockroachdb\\s+(?:ccl\\s+)?v([\\d\\.]+)",
+          "confidence": 95,
+          "description": "CockroachDB version"
+        },
+        {
+          "regex": "(?i)yugabytedb\\s+([\\d\\.]+)",
+          "confidence": 95,
+          "description": "YugabyteDB version"
+        },
+        {
+          "regex": "(?i)aurora.*postgresql",
+          "confidence": 90,
+          "description": "Amazon Aurora PostgreSQL"
+        }
+      ]
+    },
+    "mssql": {
+      "credential_service": "mssql",
+      "patterns": [
+        {
+          "regex": "(?i)microsoft\\s+sql\\s+server\\s+(\\d{4})",
+          "confidence": 95,
+          "description": "Microsoft SQL Server with year"
+        },
+        {
+          "regex": "(?i)sql\\s+server\\s+(\\d{4})",
+          "confidence": 90,
+          "description": "SQL Server with year"
+        },
+        {
+          "regex": "(?i)(mssql|sqlexpress|sqlserver)[-\\s]?([\\d\\.]+)",
+          "confidence": 85,
+          "description": "MSSQL variants with version"
+        },
+        {
+          "regex": "(?i)microsoft\\s+sql\\s+server",
+          "confidence": 85,
+          "description": "Microsoft SQL Server"
+        },
+        {
+          "regex": "(?i)azure\\s+sql\\s+database",
+          "confidence": 90,
+          "description": "Azure SQL Database"
+        }
+      ]
+    },
+    "oracle": {
+      "credential_service": "oracle",
+      "patterns": [
+        {
+          "regex": "(?i)oracle\\s+database\\s+([\\d\\w\\.]+)",
+          "confidence": 95,
+          "description": "Oracle Database"
+        },
+        {
+          "regex": "(?i)(oracle|tnslsnr)[-\\s]?([\\d\\.]+)?",
+          "confidence": 90,
+          "description": "Oracle components"
+        },
+        {
+          "regex": "(?i)\\(connect_data=.*service_name",
+          "confidence": 85,
+          "description": "Oracle TNS connection"
+        }
+      ]
+    },
+    "mongodb": {
+      "credential_service": "mongodb",
+      "patterns": [
+        {
+          "regex": "(?i)\\\"version\\\"\\s*:\\s*\\\"([\\d\\.]+)\\\"",
+          "confidence": 95,
+          "description": "MongoDB version in JSON response"
+        },
+        {
+          "regex": "(?i)mongodb\\s+([\\d\\.]+)",
+          "confidence": 90,
+          "description": "MongoDB with version"
+        },
+        {
+          "regex": "(?i)documentdb\\s+([\\d\\.]+)",
+          "confidence": 90,
+          "description": "Amazon DocumentDB with version"
+        },
+        {
+          "regex": "(?i)(mongodb|mongo)[-\\s]?(?:db)?[-\\s]?([\\d\\.]+)",
+          "confidence": 85,
+          "description": "MongoDB with version"
+        }
+      ]
+    },
+    "redis": {
+      "credential_service": "redis",
+      "patterns": [
+        {
+          "regex": "(?i)redis_version:([\\d\\.]+)",
+          "confidence": 95,
+          "description": "Redis version from INFO command"
+        },
+        {
+          "regex": "(?i)(keydb)\\s+server\\s+v([\\d\\.]+)",
+          "confidence": 95,
+          "description": "KeyDB with version"
+        },
+        {
+          "regex": "(?i)(redis|keydb)[-\\s]?(?:server)?[-\\s]?([\\d\\.]+)",
+          "confidence": 90,
+          "description": "Redis family with version"
+        },
+        {
+          "regex": "(?i)\\+PONG",
+          "confidence": 85,
+          "description": "Redis PING response"
+        },
+        {
+          "regex": "(?i)elasticache.*redis",
+          "confidence": 90,
+          "description": "Amazon ElastiCache Redis"
+        }
+      ]
+    },
+    "smb": {
+      "credential_service": "smb",
+      "patterns": [
+        {
+          "regex": "(?i)(samba|smb|cifs|netbios)[-\\s]?([\\d\\.]+)?",
+          "confidence": 90,
+          "description": "SMB/CIFS services"
+        },
+        {
+          "regex": "(?i)microsoft.*windows.*smb",
+          "confidence": 95,
+          "description": "Windows SMB"
+        },
+        {
+          "regex": "(?i)\\\\\\\\[\\w\\.-]+\\\\",
+          "confidence": 85,
+          "description": "SMB share path"
+        }
+      ]
+    },
+    "rdp": {
+      "credential_service": "rdp",
+      "patterns": [
+        {
+          "regex": "(?i)(rdp|remote\\s+desktop|terminal\\s+services)",
+          "confidence": 95,
+          "description": "RDP services"
+        },
+        {
+          "regex": "(?i)microsoft\\s+terminal\\s+services",
+          "confidence": 95,
+          "description": "Microsoft Terminal Services"
+        },
+        {
+          "regex": "(?i)\\x03\\x00\\x00.*\\x02\\xf0\\x80",
+          "confidence": 85,
+          "description": "RDP protocol signature"
+        }
+      ]
+    },
+    "http": {
+      "credential_service": "http",
+      "patterns": [
+        {
+          "regex": "(?i)(?:server:\\s*)?apache[-/\\s]?([\\d\\.]+)",
+          "confidence": 90,
+          "description": "Apache HTTP Server with version"
+        },
+        {
+          "regex": "(?i)(?:server:\\s*)?nginx[-/\\s]?([\\d\\.]+)",
+          "confidence": 90,
+          "description": "Nginx web server with version"
+        },
+        {
+          "regex": "(?i)microsoft[-\\s]?iis[-/\\s]?([\\d\\.]+)",
+          "confidence": 90,
+          "description": "Microsoft IIS with version"
+        },
+        {
+          "regex": "(?i)(lighttpd|caddy|traefik)[-/\\s]?([\\d\\.]+)",
+          "confidence": 85,
+          "description": "Other web servers with version"
+        },
+        {
+          "regex": "(?i)server:\\s*(apache|nginx|iis|lighttpd)",
+          "confidence": 85,
+          "description": "HTTP Server header without version"
+        }
+      ]
+    },
+    "https": {
+      "credential_service": "https",
+      "patterns": [
+        {
+          "regex": "(?i)(apache|httpd)[-/\\s]?([\\d\\.]+)?.*ssl",
+          "confidence": 90,
+          "description": "Apache HTTPS"
+        },
+        {
+          "regex": "(?i)nginx[-/\\s]?([\\d\\.]+)?.*ssl",
+          "confidence": 90,
+          "description": "Nginx HTTPS"
+        },
+        {
+          "regex": "(?i)openssl[-\\s]?([\\d\\.\\w]+)?",
+          "confidence": 85,
+          "description": "OpenSSL version"
+        }
+      ]
+    },
+    "smtp": {
+      "credential_service": "smtp",
+      "patterns": [
+        {
+          "regex": "(?i)(postfix|sendmail|exim|qmail)[-\\s]?([\\d\\.]+)?",
+          "confidence": 90,
+          "description": "Mail servers"
+        },
+        {
+          "regex": "(?i)microsoft\\s+exchange",
+          "confidence": 95,
+          "description": "Microsoft Exchange"
+        },
+        {
+          "regex": "(?i)220\\s+.*\\s+esmtp",
+          "confidence": 85,
+          "description": "ESMTP greeting"
+        }
+      ]
+    },
+    "pop3": {
+      "credential_service": "pop3",
+      "patterns": [
+        {
+          "regex": "(?i)\\+ok.*pop3",
+          "confidence": 90,
+          "description": "POP3 server response"
+        },
+        {
+          "regex": "(?i)(dovecot|courier).*pop3",
+          "confidence": 95,
+          "description": "POP3 server implementations"
+        }
+      ]
+    },
+    "imap": {
+      "credential_service": "imap",
+      "patterns": [
+        {
+          "regex": "(?i)\\*\\s+ok.*imap",
+          "confidence": 90,
+          "description": "IMAP server response"
+        },
+        {
+          "regex": "(?i)(dovecot|courier|cyrus).*imap",
+          "confidence": 95,
+          "description": "IMAP server implementations"
+        }
+      ]
+    },
+    "snmp": {
+      "credential_service": "snmp",
+      "patterns": [
+        {
+          "regex": "(?i)snmp\\s+(v[123])",
+          "confidence": 90,
+          "description": "SNMP version"
+        },
+        {
+          "regex": "(?i)net-snmp",
+          "confidence": 95,
+          "description": "Net-SNMP"
+        }
+      ]
+    },
+    "telnet": {
+      "credential_service": "telnet",
+      "patterns": [
+        {
+          "regex": "(?i)telnet",
+          "confidence": 80,
+          "description": "Telnet service"
+        },
+        {
+          "regex": "(?i)login:\\s*$",
+          "confidence": 85,
+          "description": "Telnet login prompt"
+        }
+      ]
+    },
+    "vnc": {
+      "credential_service": "vnc",
+      "patterns": [
+        {
+          "regex": "(?i)rfb\\s+([\\d\\.]+)",
+          "confidence": 95,
+          "description": "VNC RFB protocol"
+        },
+        {
+          "regex": "(?i)(vnc|tightvnc|realvnc|tigervnc)",
+          "confidence": 90,
+          "description": "VNC implementations"
+        }
+      ]
+    },
+    "ldap": {
+      "credential_service": "ldap",
+      "patterns": [
+        {
+          "regex": "(?i)(openldap|active\\s+directory|ldap)[-\\s]?([\\d\\.]+)?",
+          "confidence": 90,
+          "description": "LDAP services"
+        },
+        {
+          "regex": "(?i)dc=.*,dc=",
+          "confidence": 85,
+          "description": "LDAP DN format"
+        }
+      ]
+    }
+  },
+  "port_service_mapping": {
+    "21": "ftp",
+    "22": "ssh", 
+    "23": "telnet",
+    "25": "smtp",
+    "53": "dns",
+    "80": "http",
+    "110": "pop3",
+    "139": "smb",
+    "143": "imap",
+    "161": "snmp",
+    "389": "ldap",
+    "443": "https",
+    "445": "smb",
+    "993": "imap",
+    "995": "pop3",
+    "1433": "mssql",
+    "1521": "oracle",
+    "3306": "mysql",
+    "3389": "rdp",
+    "5432": "postgresql", 
+    "5900": "vnc",
+    "6379": "redis",
+    "27017": "mongodb"
+  },
+  "service_aliases": {
+    "mariadb": "mysql",
+    "percona": "mysql",
+    "postgres": "postgresql",
+    "cockroachdb": "postgresql",
+    "yugabytedb": "postgresql",
+    "mssqlserver": "mssql",
+    "sqlserver": "mssql",
+    "sqlexpress": "mssql",
+    "documentdb": "mongodb",
+    "keydb": "redis",
+    "samba": "smb",
+    "cifs": "smb",
+    "netbios": "smb",
+    "esmtp": "smtp",
+    "imaps": "imap",
+    "pop3s": "pop3",
+    "ldaps": "ldap",
+    "https": "http"
+  }
+}

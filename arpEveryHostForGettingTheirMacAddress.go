@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -42,15 +43,44 @@ type CredentialScanRequest struct {
 
 // CredentialScanResponse represents the response from credential scanner API
 type CredentialScanResponse struct {
-	Target  string           `json:"target"`
-	Service string           `json:"service"`
-	Results []CredentialTest `json:"results"`
-	Summary struct {
+	Target    string           `json:"target"`
+	Service   string           `json:"service"`
+	Detection ServiceDetection `json:"detection"`
+	Results   []CredentialTest `json:"results"`
+	Summary   struct {
 		TotalTests int  `json:"total_tests"`
 		Successful int  `json:"successful"`
 		Failed     int  `json:"failed"`
 		Vulnerable bool `json:"vulnerable"`
 	} `json:"summary"`
+}
+
+// ServiceDetection represents detailed service detection results
+type ServiceDetection struct {
+	Service     string `json:"service"`
+	Confidence  int    `json:"confidence"`
+	Version     string `json:"version,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ServicePattern represents a regex pattern for service detection
+type ServicePattern struct {
+	Regex       string `json:"regex"`
+	Confidence  int    `json:"confidence"`
+	Description string `json:"description"`
+}
+
+// ServicePatternData contains all patterns for a service
+type ServicePatternData struct {
+	CredentialService string           `json:"credential_service"`
+	Patterns          []ServicePattern `json:"patterns"`
+}
+
+// ServiceDetectionConfig holds the complete service detection configuration
+type ServiceDetectionConfig struct {
+	ServicePatterns    map[string]ServicePatternData `json:"service_patterns"`
+	PortServiceMapping map[string]string             `json:"port_service_mapping"`
+	ServiceAliases     map[string]string             `json:"service_aliases"`
 }
 
 // performARPScan performs comprehensive ARP scanning to discover live hosts on the network.
@@ -477,6 +507,153 @@ func performCredentialScan(ip string, port int, service string, apiURL string) (
 	return &response, nil
 }
 
+// loadServiceDetectionConfig loads service detection configuration from JSON file
+func loadServiceDetectionConfig() *ServiceDetectionConfig {
+	// Try to load from JSON file
+	configPath := "service-detection-config.json"
+	if file, err := os.Open(configPath); err == nil {
+		defer file.Close()
+		decoder := json.NewDecoder(file)
+		var config ServiceDetectionConfig
+		if err := decoder.Decode(&config); err == nil {
+			log.Printf("Loaded service detection config from %s", configPath)
+			return &config
+		} else {
+			log.Printf("Warning: Failed to parse service detection config: %v", err)
+		}
+	} else {
+		log.Printf("Warning: Service detection config not found at %s: %v", configPath, err)
+	}
+
+	// Return fallback configuration
+	return &ServiceDetectionConfig{
+		ServicePatterns: make(map[string]ServicePatternData),
+		PortServiceMapping: map[string]string{
+			"21": "ftp", "22": "ssh", "139": "smb", "445": "smb",
+			"1433": "mssql", "1521": "oracle", "3306": "mysql",
+			"3389": "rdp", "5432": "postgresql", "6379": "redis", "27017": "mongodb",
+		},
+		ServiceAliases: map[string]string{
+			"mariadb": "mysql", "postgres": "postgresql", "samba": "smb",
+		},
+	}
+}
+
+// detectServiceWithConfidence performs intelligent service detection using regex patterns
+func detectServiceWithConfidence(ip string, port int, banner string, config *ServiceDetectionConfig) ServiceDetection {
+	bestMatch := ServiceDetection{Service: "unknown", Confidence: 0}
+
+	// Try regex-based detection first (higher accuracy)
+	if banner != "" {
+		for serviceName, serviceData := range config.ServicePatterns {
+			for _, pattern := range serviceData.Patterns {
+				regex, err := regexp.Compile(pattern.Regex)
+				if err != nil {
+					log.Printf("Warning: Invalid regex pattern for %s: %v", serviceName, err)
+					continue
+				}
+
+				matches := regex.FindStringSubmatch(banner)
+				if len(matches) > 0 {
+					confidence := pattern.Confidence
+					version := ""
+
+					// Extract version if available in match groups
+					if len(matches) > 1 {
+						version = matches[1]
+					}
+
+					if confidence > bestMatch.Confidence {
+						credentialService := serviceData.CredentialService
+						if credentialService == "" {
+							credentialService = serviceName
+						}
+
+						bestMatch = ServiceDetection{
+							Service:     credentialService,
+							Confidence:  confidence,
+							Version:     version,
+							Description: pattern.Description,
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// If no high-confidence match, try port-based detection
+	if bestMatch.Confidence < 85 {
+		if portService, exists := config.PortServiceMapping[fmt.Sprintf("%d", port)]; exists {
+			// Apply service aliases
+			if alias, hasAlias := config.ServiceAliases[portService]; hasAlias {
+				portService = alias
+			}
+
+			if bestMatch.Confidence < 70 {
+				bestMatch = ServiceDetection{
+					Service:     portService,
+					Confidence:  70,
+					Description: "Port-based detection",
+				}
+			}
+		}
+	}
+
+	return bestMatch
+}
+
+// grabBanner attempts to grab service banner for detection
+func grabBanner(ip string, port int) string {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), 5*time.Second)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+
+	// Set read timeout
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+
+	// Different banner grabbing strategies for different port ranges
+	switch {
+	case port == 21 || port == 25 || port == 110 || port == 143 || port == 220:
+		// Services that send greeting automatically
+		buffer := make([]byte, 1024)
+		n, err := conn.Read(buffer)
+		if err == nil && n > 0 {
+			return string(buffer[:n])
+		}
+
+	case port == 22:
+		// SSH
+		buffer := make([]byte, 1024)
+		n, err := conn.Read(buffer)
+		if err == nil && n > 0 {
+			return string(buffer[:n])
+		}
+
+	case port == 80 || port == 443 || port == 8080 || port == 8443:
+		// HTTP services
+		httpReq := fmt.Sprintf("HEAD / HTTP/1.1\r\nHost: %s\r\n\r\n", ip)
+		conn.Write([]byte(httpReq))
+		buffer := make([]byte, 1024)
+		n, err := conn.Read(buffer)
+		if err == nil && n > 0 {
+			return string(buffer[:n])
+		}
+
+	default:
+		// Generic banner grab
+		conn.Write([]byte("\r\n"))
+		buffer := make([]byte, 1024)
+		n, err := conn.Read(buffer)
+		if err == nil && n > 0 {
+			return string(buffer[:n])
+		}
+	}
+
+	return ""
+}
+
 // performComprehensiveCredentialScan performs credential testing for all discovered hosts
 // Technique: Iterates through all hosts and their open ports, testing each service with credential scanner
 // Implements parallel processing with worker pools for efficient credential testing
@@ -493,21 +670,8 @@ func performComprehensiveCredentialScan(assets []Asset, apiURL string) map[strin
 	maxWorkers := 10
 	semaphore := make(chan struct{}, maxWorkers)
 
-	// Service port mapping for automatic service detection
-	servicePorts := map[int]string{
-		21:    "ftp",
-		22:    "ssh",
-		23:    "telnet",
-		139:   "smb",
-		445:   "smb",
-		1433:  "mssql",
-		1521:  "oracle",
-		3306:  "mysql",
-		3389:  "rdp",
-		5432:  "postgresql",
-		6379:  "redis",
-		27017: "mongodb",
-	}
+	// Load service detection configuration
+	serviceConfig := loadServiceDetectionConfig()
 
 	totalTests := 0
 	for _, asset := range assets {
@@ -533,53 +697,52 @@ func performComprehensiveCredentialScan(assets []Asset, apiURL string) map[strin
 				semaphore <- struct{}{}
 				defer func() { <-semaphore }()
 
-				// Determine service type
+				// Intelligent service detection
 				service := port.Service
+				var serviceDetection ServiceDetection
+
 				if service == "" || service == "unknown" {
-					if detectedService, exists := servicePorts[port.Number]; exists {
-						service = detectedService
-					} else {
-						// Try to detect from banner
-						banner := strings.ToLower(port.Banner)
-						if strings.Contains(banner, "ssh") {
-							service = "ssh"
-						} else if strings.Contains(banner, "ftp") {
-							service = "ftp"
-						} else if strings.Contains(banner, "mysql") {
-							service = "mysql"
-						} else if strings.Contains(banner, "postgresql") {
-							service = "postgresql"
-						} else if strings.Contains(banner, "microsoft") {
-							service = "mssql"
-						} else if strings.Contains(banner, "redis") {
-							service = "redis"
-						} else if strings.Contains(banner, "mongodb") {
-							service = "mongodb"
-						} else if strings.Contains(banner, "samba") || strings.Contains(banner, "smb") {
-							service = "smb"
-						} else {
-							// Skip unknown services
-							return
-						}
+					// Get banner if not already available
+					banner := port.Banner
+					if banner == "" {
+						banner = grabBanner(asset.Address, port.Number)
+					}
+
+					// Use intelligent service detection
+					serviceDetection = detectServiceWithConfidence(asset.Address, port.Number, banner, serviceConfig)
+					service = serviceDetection.Service
+				} else {
+					// Use existing service but create detection result
+					serviceDetection = ServiceDetection{
+						Service:     service,
+						Confidence:  80,
+						Description: "Pre-detected service",
 					}
 				}
 
-				// Skip if service is not supported by credential scanner
-				supportedServices := []string{"ssh", "ftp", "smb", "redis", "postgresql", "mysql", "mssql", "oracle", "mongodb", "rdp"}
+				// Skip if service is unknown or not supported
+				supportedServices := []string{"ssh", "ftp", "smb", "redis", "postgresql", "mysql", "mssql", "oracle", "mongodb", "rdp", "telnet", "http", "https", "smtp", "pop3", "imap", "ldap", "snmp", "vnc"}
 				isSupported := false
 				for _, supported := range supportedServices {
-					if strings.Contains(strings.ToLower(service), supported) {
-						service = supported
+					if strings.ToLower(service) == supported {
 						isSupported = true
 						break
 					}
 				}
 
-				if !isSupported {
+				if !isSupported || service == "unknown" {
+					if serviceDetection.Confidence > 0 {
+						log.Printf("Skipping unsupported service: %s (confidence: %d) on %s:%d", service, serviceDetection.Confidence, asset.Address, port.Number)
+					}
 					return
 				}
 
-				fmt.Printf("Testing credentials for %s:%d (%s)...\n", asset.Address, port.Number, service)
+				// Log service detection details
+				if serviceDetection.Version != "" {
+					fmt.Printf("Testing credentials for %s:%d (%s v%s, confidence: %d%%)...\n", asset.Address, port.Number, service, serviceDetection.Version, serviceDetection.Confidence)
+				} else {
+					fmt.Printf("Testing credentials for %s:%d (%s, confidence: %d%%)...\n", asset.Address, port.Number, service, serviceDetection.Confidence)
+				}
 
 				response, err := performCredentialScan(asset.Address, port.Number, service, apiURL)
 				if err != nil {
