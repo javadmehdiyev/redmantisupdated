@@ -18,6 +18,11 @@
         "workers": 200,
         "rate_limit": "50ms"
     },
+    "netbios": {
+        "enabled": true,
+        "timeout": "3s",
+        "workers": 20
+    },
     "port_scan": {
         "enabled": true,
         "timeout": "2s",
