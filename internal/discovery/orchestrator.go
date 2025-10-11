@@ -14,6 +14,7 @@ import (
 	"redmantis/internal/credentials"
 	"redmantis/internal/network"
 	"redmantis/internal/scanning"
+	"redmantis/internal/screenshot"
 )
 
 // Orchestrator coordinates all scanning activities
@@ -398,6 +399,11 @@ func (o *Orchestrator) Run() {
 
 	// Merge all results including credential tests (with NetBIOS info)
 	finalAssets := o.assetMgr.MergeAllResults(finalHosts, portScanResults, hostnameMap, netbiosHostnames, netbiosOSInfo, credentialResults)
+
+	// Phase 7: Screenshot Capture for Web Services
+	fmt.Println("\n=== Phase 7: Screenshot Capture ===")
+	screenshotService := screenshot.NewService(15*time.Second, 5) // 15s timeout, 5 concurrent workers
+	finalAssets = screenshotService.CaptureScreenshots(finalAssets)
 
 	aliveCount := 0
 	for _, host := range finalHosts {

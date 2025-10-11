@@ -8,6 +8,7 @@ Fast network scanner with asset discovery, credential testing, and REST API.
 - Go 1.25+ 
 - Python 3.7+ 
 - nmap
+- Google Chrome or Chromium (for screenshots)
 - Root/sudo access
 
 ### Installation & Run
@@ -63,7 +64,8 @@ Edit `config.json`:
 
 - **Multi-technique Discovery**: ARP, ICMP, TCP, SYN, Passive, mDNS, NetBIOS
 - **Windows Detection**: NetBIOS queries for hostname and OS info
-- **Port & Service Scanning**: nmap integration with banner grabbing  
+- **Port & Service Scanning**: nmap integration with banner grabbing
+- **Web Screenshots**: Automatic screenshot capture of web services (base64 encoded)
 - **Credential Testing**: Default password testing on discovered services
 - **Asset Inventory**: Complete device information with JSON export
 - **REST API**: Programmatic access with pagination
@@ -79,6 +81,10 @@ Found 15 alive hosts
 ✓ Found NetBIOS info for 192.168.1.100: WIN10-PC (Windows 10)
 ✓ Found NetBIOS info for 192.168.1.101: SERVER2019 (Windows Server)
 
+=== Phase 7: Screenshot Capture ===
+✓ Captured screenshot for 192.168.1.100 (http://192.168.1.100:80)
+✓ Captured screenshot for 192.168.1.101 (https://192.168.1.101:443)
+
 === Phase 8: Credential Testing ===
 ✓ Found vulnerable credentials for 192.168.1.100:22 - admin:admin (SSH)
 ```
@@ -90,9 +96,12 @@ Found 15 alive hosts
   "hostname": "WIN10-PC", 
   "os": "Windows 10",
   "ports": [{"number": 22, "service": "OpenSSH 8.2"}],
-  "credential_tests": [{"service": "ssh", "success": true}]
+  "credential_tests": [{"service": "ssh", "success": true}],
+  "screenshot": "iVBORw0KGgoAAAANSUhEUgAA..."
 }]
 ```
+
+**Note**: The `screenshot` field contains a base64-encoded PNG image that can be displayed in web browsers.
 
 ## 🛡️ Security Notice
 

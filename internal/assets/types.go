@@ -4,16 +4,17 @@ import "time"
 
 // Asset represents a complete asset inventory record
 type Asset struct {
-	Address   string           `json:"address"`
-	Hostname  string           `json:"hostname"`
-	Mac       string           `json:"mac"`
-	MacVendor string           `json:"mac_vendor"`
-	Type      string           `json:"type"`
-	OS        string           `json:"os"`
-	Hardware  string           `json:"hardware"`
-	Date      time.Time        `json:"date"`
-	Ports     []PortScanResult `json:"ports"`
-	CredTest  []CredentialTest `json:"credential_tests"`
+	Address    string           `json:"address"`
+	Hostname   string           `json:"hostname"`
+	Mac        string           `json:"mac"`
+	MacVendor  string           `json:"mac_vendor"`
+	Type       string           `json:"type"`
+	OS         string           `json:"os"`
+	Hardware   string           `json:"hardware"`
+	Date       time.Time        `json:"date"`
+	Ports      []PortScanResult `json:"ports"`
+	CredTest   []CredentialTest `json:"credential_tests"`
+	Screenshot string           `json:"screenshot,omitempty"`
 }
 
 // PortScanResult represents the final port scan result

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RedMantis Screenshot Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .controls input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            border: 2px dashed #667eea;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .stats {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+        }
+        
+        .stat-item h3 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-item p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+        
+        .asset-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .asset-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+        }
+        
+        .asset-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+        }
+        
+        .asset-header h2 {
+            font-size: 1.3em;
+            margin-bottom: 5px;
+        }
+        
+        .asset-header p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .screenshot-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 aspect ratio */
+            background: #f5f5f5;
+            overflow: hidden;
+        }
+        
+        .screenshot-container img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            cursor: pointer;
+        }
+        
+        .no-screenshot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #999;
+        }
+        
+        .asset-info {
+            padding: 15px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .info-value {
+            color: #333;
+        }
+        
+        .ports-list {
+            margin-top: 10px;
+        }
+        
+        .port-tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin: 2px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+        }
+        
+        .modal-content {
+            position: relative;
+            margin: 2% auto;
+            max-width: 95%;
+            max-height: 90%;
+        }
+        
+        .modal-content img {
+            width: 100%;
+            height: auto;
+        }
+        
+        .close {
+            position: absolute;
+            top: 20px;
+            right: 40px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1001;
+        }
+        
+        .close:hover {
+            color: #667eea;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: white;
+        }
+        
+        .empty-state h2 {
+            font-size: 2em;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 RedMantis Screenshot Viewer</h1>
+            <p>View captured screenshots from network assets</p>
+        </div>
+        
+        <div class="controls">
+            <label for="fileInput">
+                <strong>Load assets.json file:</strong>
+                <input type="file" id="fileInput" accept=".json" />
+            </label>
+        </div>
+        
+        <div id="stats" class="stats" style="display: none;"></div>
+        
+        <div id="assetGrid" class="grid"></div>
+        
+        <div id="emptyState" class="empty-state">
+            <h2>📁 No data loaded</h2>
+            <p>Please select an assets.json file to view screenshots</p>
+        </div>
+    </div>
+    
+    <div id="modal" class="modal">
+        <span class="close">&times;</span>
+        <div class="modal-content">
+            <img id="modalImg" src="" alt="Screenshot">
+        </div>
+    </div>
+    
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const assetGrid = document.getElementById('assetGrid');
+        const emptyState = document.getElementById('emptyState');
+        const statsDiv = document.getElementById('stats');
+        const modal = document.getElementById('modal');
+        const modalImg = document.getElementById('modalImg');
+        const closeBtn = document.querySelector('.close');
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const assets = JSON.parse(event.target.result);
+                        displayAssets(assets);
+                    } catch (error) {
+                        alert('Error parsing JSON file: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+        
+        function displayAssets(assets) {
+            emptyState.style.display = 'none';
+            assetGrid.innerHTML = '';
+            
+            // Calculate stats
+            const totalAssets = assets.length;
+            const assetsWithScreenshots = assets.filter(a => a.screenshot).length;
+            const totalPorts = assets.reduce((sum, a) => sum + (a.ports ? a.ports.length : 0), 0);
+            const totalVulnerabilities = assets.reduce((sum, a) => {
+                return sum + (a.credential_tests || []).filter(c => c.success).length;
+            }, 0);
+            
+            // Display stats
+            statsDiv.style.display = 'grid';
+            statsDiv.innerHTML = `
+                <div class="stat-item">
+                    <h3>${totalAssets}</h3>
+                    <p>Total Assets</p>
+                </div>
+                <div class="stat-item">
+                    <h3>${assetsWithScreenshots}</h3>
+                    <p>With Screenshots</p>
+                </div>
+                <div class="stat-item">
+                    <h3>${totalPorts}</h3>
+                    <p>Open Ports</p>
+                </div>
+                <div class="stat-item">
+                    <h3>${totalVulnerabilities}</h3>
+                    <p>Vulnerabilities</p>
+                </div>
+            `;
+            
+            // Display assets with screenshots first
+            const sortedAssets = [...assets].sort((a, b) => {
+                if (a.screenshot && !b.screenshot) return -1;
+                if (!a.screenshot && b.screenshot) return 1;
+                return 0;
+            });
+            
+            sortedAssets.forEach(asset => {
+                const card = createAssetCard(asset);
+                assetGrid.appendChild(card);
+            });
+        }
+        
+        function createAssetCard(asset) {
+            const card = document.createElement('div');
+            card.className = 'asset-card';
+            
+            const hostname = asset.hostname !== 'unknown' ? asset.hostname : 'Unknown';
+            const os = asset.os !== 'unknown' ? asset.os : 'Unknown';
+            const portCount = asset.ports ? asset.ports.length : 0;
+            
+            let screenshotHTML;
+            if (asset.screenshot) {
+                screenshotHTML = `
+                    <div class="screenshot-container">
+                        <img src="data:image/png;base64,${asset.screenshot}" 
+                             alt="Screenshot of ${asset.address}"
+                             onclick="openModal('data:image/png;base64,${asset.screenshot}')">
+                    </div>
+                `;
+            } else {
+                screenshotHTML = `
+                    <div class="screenshot-container">
+                        <div class="no-screenshot">
+                            <p>📷</p>
+                            <p>No screenshot available</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            let portsHTML = '';
+            if (asset.ports && asset.ports.length > 0) {
+                portsHTML = '<div class="ports-list">';
+                asset.ports.slice(0, 10).forEach(port => {
+                    portsHTML += `<span class="port-tag">${port.number}/${port.service || 'unknown'}</span>`;
+                });
+                if (asset.ports.length > 10) {
+                    portsHTML += `<span class="port-tag">+${asset.ports.length - 10} more</span>`;
+                }
+                portsHTML += '</div>';
+            }
+            
+            card.innerHTML = `
+                <div class="asset-header">
+                    <h2>${asset.address}</h2>
+                    <p>${hostname}</p>
+                </div>
+                ${screenshotHTML}
+                <div class="asset-info">
+                    <div class="info-row">
+                        <span class="info-label">OS:</span>
+                        <span class="info-value">${os}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">MAC:</span>
+                        <span class="info-value">${asset.mac || 'unknown'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Open Ports:</span>
+                        <span class="info-value">${portCount}</span>
+                    </div>
+                    ${portsHTML}
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        function openModal(imgSrc) {
+            modal.style.display = 'block';
+            modalImg.src = imgSrc;
+        }
+        
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+        }
+        
+        modal.onclick = function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                modal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
+
