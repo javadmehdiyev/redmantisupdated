@@ -15,7 +15,7 @@ import (
 func ExportToJSON(assets []Asset, cfg *config.Config) error {
 	outputFile := cfg.Files.OutputFile
 	if outputFile == "" {
-		outputFile = "assets.json" // Default fallback
+		outputFile = "/var/www/redmantis/golang/assets.json" // Default fallback
 	}
 
 	fmt.Printf("\n💾 Exporting assets to %s...\n", outputFile)
