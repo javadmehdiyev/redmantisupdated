@@ -8,27 +8,42 @@ import (
 
 	"redmantis/api/models"
 	"redmantis/internal/assets"
+	"redmantis/internal/config"
 
 	"github.com/gin-gonic/gin"
 )
 
 // AssetHandler handles asset-related API requests
 type AssetHandler struct {
-	assetList []assets.Asset
+	assetList   []assets.Asset
+	assetsError error
 }
 
 // NewAssetHandler creates a new asset handler
 func NewAssetHandler() *AssetHandler {
 	handler := &AssetHandler{}
 	if err := handler.loadAssets(); err != nil {
-		log.Fatal("Failed to load assets from results.json:", err)
+		log.Printf("Warning: Failed to load assets: %v", err)
+		handler.assetsError = err
 	}
 	return handler
 }
 
 // loadAssets loads assets data from the results.json file
 func (h *AssetHandler) loadAssets() error {
-	assetList, err := assets.LoadFromJSON("../assets.json")
+	// Load configuration to get output file path
+	cfg, err := config.Load("../config.json")
+	if err != nil {
+		log.Printf("Warning: Could not load config.json, using default path: %v", err)
+		// Fallback to default path if config loading fails
+		cfg = &config.Config{}
+		cfg.Files.OutputFile = "assets.json"
+	}
+
+	// Build the assets file path (relative to API directory)
+	assetsFilePath := "../" + cfg.Files.OutputFile
+
+	assetList, err := assets.LoadFromJSON(assetsFilePath)
 	if err != nil {
 		return err
 	}
@@ -45,7 +60,7 @@ func (h *AssetHandler) loadAssets() error {
 	}
 
 	h.assetList = assetList
-	log.Printf("Successfully loaded %d assets from results.json", len(assetList))
+	log.Printf("Successfully loaded %d assets from %s", len(assetList), assetsFilePath)
 	return nil
 }
 
@@ -61,6 +76,19 @@ func (h *AssetHandler) loadAssets() error {
 // @Failure 400 {object} models.ErrorResponse "Invalid parameters"
 // @Router /assets [get]
 func (h *AssetHandler) GetAssets(c *gin.Context) {
+	// If assets failed to load, return empty array
+	if h.assetsError != nil {
+		response := models.AssetListResponse{
+			TotalAssets: 0,
+			CurrentPage: 1,
+			PageSize:    10,
+			TotalPages:  0,
+			Data:        []models.AssetResponse{},
+		}
+		c.JSON(http.StatusOK, response)
+		return
+	}
+
 	sizeParam := c.Query("size")
 	pageParam := c.Query("page")
 
