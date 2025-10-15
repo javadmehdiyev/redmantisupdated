@@ -287,8 +287,8 @@ func (o *Orchestrator) Run() {
 				}
 			}
 
-			// Perform port scanning
-			portResults := scanning.ScanMultiple(ips)
+			// Perform port scanning (TCP + UDP)
+			portResults := scanning.ScanMultipleTCPAndUDP(ips)
 
 			// Convert PortResult to PortScanResult format
 			portScanResults = make(map[string][]assets.PortScanResult)

@@ -12,10 +12,18 @@ import (
 	"redmantis/internal/assets"
 )
 
-// Common ports to scan (both TCP and UDP - nmap will differentiate)
-var CommonPorts = []int{
-	21, 22, 23, 25, 53, 69, 80, 81, 88, 110, 111, 123, 135, 137, 139, 161, 177, 389, 427, 443, 445, 465, 500, 515, 520, 523, 548, 623, 626, 636, 873, 902, 1080, 1099, 1433, 1434, 1521, 1604, 1645, 1701, 1883, 1900, 2049, 2181, 2375, 2379, 2425, 3128, 3306, 3389, 4730, 5060, 5222, 5351, 5353, 5432, 5555, 5601, 5672, 5683, 5900, 5938, 5984, 6000, 6379, 7001, 7077, 8080, 8081, 8443, 8545, 8686, 9000, 9001, 9042, 9092, 9100, 9200, 9418, 9999, 11211, 27017, 33848, 37777, 50000, 50070, 61616, 5000, 7000,
+// Common TCP ports to scan
+var CommonTCPPorts = []int{
+	21, 22, 23, 25, 80, 81, 88, 110, 111, 135, 139, 389, 443, 445, 465, 515, 636, 873, 902, 1080, 1099, 1433, 1521, 2049, 2181, 2375, 2379, 2425, 3128, 3306, 3389, 4730, 5060, 5222, 5432, 5555, 5601, 5672, 5900, 5938, 5984, 6000, 6379, 7001, 7077, 8080, 8081, 8443, 8545, 8686, 9000, 9001, 9042, 9092, 9100, 9200, 9418, 9999, 11211, 27017, 33848, 37777, 50000, 50070, 61616, 5000, 7000,
 }
+
+// Common UDP ports to scan (limited set for performance)
+var CommonUDPPorts = []int{
+	53, 67, 68, 69, 123, 137, 138, 161, 162, 500, 514, 520, 1434, 1900, 4500, 5353,
+}
+
+// CommonPorts is the default TCP port list for backward compatibility
+var CommonPorts = CommonTCPPorts
 
 // NmapXMLResult represents the XML structure returned by nmap
 type NmapXMLResult struct {
@@ -49,20 +57,40 @@ type NmapXMLResult struct {
 	} `xml:"host"`
 }
 
-// ScanPorts performs port scanning on a specific IP address
+// ScanPorts performs TCP port scanning on a specific IP address
 func ScanPorts(ipAddress string, portList []int) []assets.PortResult {
+	return ScanPortsWithProtocol(ipAddress, portList, "tcp")
+}
+
+// ScanPortsWithProtocol performs port scanning on a specific IP address with specified protocol
+func ScanPortsWithProtocol(ipAddress string, portList []int, protocol string) []assets.PortResult {
 	var results []assets.PortResult
 
 	// Convert port list to string format for nmap
 	portStr := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(portList)), ","), "[]")
 
+	// Determine scan type based on protocol
+	var scanType string
+	var timing string
+	var minRate string
+	
+	if protocol == "udp" {
+		scanType = "-sU" // UDP scan (requires root)
+		timing = "-T4"   // T4 for UDP (T5 too aggressive for UDP)
+		minRate = "1000" // Lower rate for UDP
+	} else {
+		scanType = "-sS" // SYN scan (requires root, faster than -sT)
+		timing = "-T5"   // T5 for TCP
+		minRate = "5000" // Higher rate for TCP
+	}
+
 	// Build nmap command with XML output - optimized for speed
+	// Note: Both -sS and -sU require root/sudo privileges
 	cmd := exec.Command("nmap",
-		"-sS",                 // SYN scan
-		"-sU",
+		scanType,              // Scan type based on protocol
 		"-sV",                 // Version detection
-		"-T5",                 // Insane timing (maximum speed)
-		"--min-rate", "5000",  // Aggressive packet rate
+		timing,                // Timing template
+		"--min-rate", minRate, // Packet rate
 		"--max-retries", "1",  // Reduce retries for speed
 		"--host-timeout", "5m", // Maximum time per host
 		"--version-intensity", "2", // Lighter version detection
@@ -71,9 +99,10 @@ func ScanPorts(ipAddress string, portList []int) []assets.PortResult {
 		ipAddress)
 
 	// Execute nmap command
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("Error running nmap: %v\n", err)
+		fmt.Printf("Error running nmap on %s: %v\n", ipAddress, err)
+		fmt.Printf("Nmap output: %s\n", string(output))
 		return results
 	}
 
@@ -142,13 +171,41 @@ func ScanPorts(ipAddress string, portList []int) []assets.PortResult {
 	return results
 }
 
-// ScanMultiple scans multiple IP addresses using the common port list with parallel execution
+// ScanMultiple scans multiple IP addresses using the common TCP port list with parallel execution
 func ScanMultiple(ips []net.IP) []assets.PortResult {
 	return ScanMultipleWithWorkers(ips, 10)
 }
 
-// ScanMultipleWithWorkers scans multiple IP addresses with a specified number of workers
+// ScanMultipleTCPAndUDP scans multiple IP addresses for both TCP and UDP ports
+func ScanMultipleTCPAndUDP(ips []net.IP) []assets.PortResult {
+	fmt.Println("\n=== Starting TCP + UDP Port Scanning ===")
+	fmt.Println("Note: UDP scanning is slower but provides comprehensive coverage")
+	
+	// Scan TCP ports first (faster)
+	fmt.Println("\n--- Scanning TCP Ports ---")
+	tcpResults := ScanMultipleWithWorkersAndProtocol(ips, 10, CommonTCPPorts, "tcp")
+	
+	// Scan UDP ports (slower, limited port list)
+	fmt.Println("\n--- Scanning UDP Ports ---")
+	fmt.Printf("Scanning %d common UDP ports (reduced set for performance)\n", len(CommonUDPPorts))
+	udpResults := ScanMultipleWithWorkersAndProtocol(ips, 5, CommonUDPPorts, "udp") // Fewer workers for UDP
+	
+	// Merge results
+	allResults := append(tcpResults, udpResults...)
+	fmt.Printf("\n=== Port Scanning Complete ===\n")
+	fmt.Printf("Total: %d TCP ports + %d UDP ports = %d total open ports\n", 
+		len(tcpResults), len(udpResults), len(allResults))
+	
+	return allResults
+}
+
+// ScanMultipleWithWorkers scans multiple IP addresses with a specified number of workers (TCP only)
 func ScanMultipleWithWorkers(ips []net.IP, workers int) []assets.PortResult {
+	return ScanMultipleWithWorkersAndProtocol(ips, workers, CommonTCPPorts, "tcp")
+}
+
+// ScanMultipleWithWorkersAndProtocol scans multiple IP addresses with specified workers, ports, and protocol
+func ScanMultipleWithWorkersAndProtocol(ips []net.IP, workers int, portList []int, protocol string) []assets.PortResult {
 	// Use worker pool for parallel scanning
 	maxWorkers := workers
 	if maxWorkers <= 0 {
@@ -158,7 +215,8 @@ func ScanMultipleWithWorkers(ips []net.IP, workers int) []assets.PortResult {
 		maxWorkers = len(ips)
 	}
 
-	fmt.Printf("Starting parallel port scan on %d hosts with %d workers...\n", len(ips), maxWorkers)
+	protocolName := strings.ToUpper(protocol)
+	fmt.Printf("Starting parallel %s port scan on %d hosts with %d workers...\n", protocolName, len(ips), maxWorkers)
 
 	// Channels for work distribution
 	ipChan := make(chan net.IP, len(ips))
@@ -177,7 +235,7 @@ func ScanMultipleWithWorkers(ips []net.IP, workers int) []assets.PortResult {
 		go func(workerID int) {
 			defer wg.Done()
 			for ip := range ipChan {
-				results := ScanPorts(ip.String(), CommonPorts)
+				results := ScanPortsWithProtocol(ip.String(), portList, protocol)
 				resultsChan <- results
 				
 				// Update progress
@@ -212,6 +270,6 @@ func ScanMultipleWithWorkers(ips []net.IP, workers int) []assets.PortResult {
 		allResults = append(allResults, results...)
 	}
 
-	fmt.Printf("Port scanning completed! Found %d open ports across all hosts\n", len(allResults))
+	fmt.Printf("%s port scanning completed! Found %d open ports across all hosts\n", protocolName, len(allResults))
 	return allResults
 }
