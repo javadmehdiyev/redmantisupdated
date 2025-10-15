@@ -28,7 +28,7 @@ func NewAssetHandler() *AssetHandler {
 
 // loadAssets loads assets data from the results.json file
 func (h *AssetHandler) loadAssets() error {
-	assetList, err := assets.LoadFromJSON("/var/www/redmantis/golang/assets.json")
+	assetList, err := assets.LoadFromJSON("../assets.json")
 	if err != nil {
 		return err
 	}

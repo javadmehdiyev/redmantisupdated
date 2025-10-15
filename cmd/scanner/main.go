@@ -10,7 +10,7 @@ import (
 
 func main() {
 	// Load configuration
-	cfg, err := config.Load("/var/www/redmantis/golang/config.json")
+	cfg, err := config.Load("config.json")
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		fmt.Println("Please ensure config.json exists and is properly formatted")
