@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"redmantis/internal/assets"
 )
@@ -55,13 +56,16 @@ func ScanPorts(ipAddress string, portList []int) []assets.PortResult {
 	// Convert port list to string format for nmap
 	portStr := strings.Trim(strings.Join(strings.Fields(fmt.Sprint(portList)), ","), "[]")
 
-	// Build nmap command with XML output
+	// Build nmap command with XML output - optimized for speed
 	cmd := exec.Command("nmap",
-		"-sS",                // SYN scan
-		"-sV",                // Version detection
-		"-O",                 // OS detection
-		"-T4",                // Aggressive timing (faster)
-		"--min-rate", "1000", // Minimum packet rate
+		"-sS",                 // SYN scan
+		"-sU",
+		"-sV",                 // Version detection
+		"-T5",                 // Insane timing (maximum speed)
+		"--min-rate", "5000",  // Aggressive packet rate
+		"--max-retries", "1",  // Reduce retries for speed
+		"--host-timeout", "5m", // Maximum time per host
+		"--version-intensity", "2", // Lighter version detection
 		"-p", portStr, // Port list
 		"-oX", "-", // XML output to stdout
 		ipAddress)
@@ -138,14 +142,76 @@ func ScanPorts(ipAddress string, portList []int) []assets.PortResult {
 	return results
 }
 
-// ScanMultiple scans multiple IP addresses using the common port list
+// ScanMultiple scans multiple IP addresses using the common port list with parallel execution
 func ScanMultiple(ips []net.IP) []assets.PortResult {
-	var allResults []assets.PortResult
+	return ScanMultipleWithWorkers(ips, 10)
+}
 
-	for _, ip := range ips {
-		results := ScanPorts(ip.String(), CommonPorts)
+// ScanMultipleWithWorkers scans multiple IP addresses with a specified number of workers
+func ScanMultipleWithWorkers(ips []net.IP, workers int) []assets.PortResult {
+	// Use worker pool for parallel scanning
+	maxWorkers := workers
+	if maxWorkers <= 0 {
+		maxWorkers = 10 // Default to 10 workers
+	}
+	if len(ips) < maxWorkers {
+		maxWorkers = len(ips)
+	}
+
+	fmt.Printf("Starting parallel port scan on %d hosts with %d workers...\n", len(ips), maxWorkers)
+
+	// Channels for work distribution
+	ipChan := make(chan net.IP, len(ips))
+	resultsChan := make(chan []assets.PortResult, len(ips))
+
+	// WaitGroup to track worker completion
+	var wg sync.WaitGroup
+
+	// Progress tracking
+	var completed int
+	var completedMutex sync.Mutex
+
+	// Start worker goroutines
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for ip := range ipChan {
+				results := ScanPorts(ip.String(), CommonPorts)
+				resultsChan <- results
+				
+				// Update progress
+				completedMutex.Lock()
+				completed++
+				if completed%5 == 0 || completed == len(ips) {
+					fmt.Printf("Progress: %d/%d hosts scanned (%.1f%%)\n", 
+						completed, len(ips), float64(completed)/float64(len(ips))*100)
+				}
+				completedMutex.Unlock()
+			}
+		}(i)
+	}
+
+	// Send IPs to workers
+	go func() {
+		for _, ip := range ips {
+			ipChan <- ip
+		}
+		close(ipChan)
+	}()
+
+	// Wait for all workers to complete
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect all results
+	var allResults []assets.PortResult
+	for results := range resultsChan {
 		allResults = append(allResults, results...)
 	}
 
+	fmt.Printf("Port scanning completed! Found %d open ports across all hosts\n", len(allResults))
 	return allResults
 }
