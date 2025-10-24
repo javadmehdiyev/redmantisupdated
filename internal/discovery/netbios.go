@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"strings"
@@ -25,7 +26,15 @@ type NetBIOSResults struct {
 	Duration time.Duration
 }
 
+// NetBIOSNameEntry represents a single NetBIOS name entry
+type NetBIOSNameEntry struct {
+	Name  string
+	Type  byte
+	Flags uint16
+}
+
 // ScanNetBIOS performs NetBIOS queries on Windows hosts to get hostname and OS info
+// Implementation inspired by csploit/daemon NetBIOS scanner
 func ScanNetBIOS(hosts []network.HostStatus) NetBIOSResults {
 	start := time.Now()
 
@@ -67,13 +76,8 @@ func ScanNetBIOS(hosts []network.HostStatus) NetBIOSResults {
 			defer wg.Done()
 			defer func() { <-sem }() // Release semaphore
 
-			// Try NetBIOS name service query (port 137/UDP)
+			// Query NetBIOS
 			netbiosInfo := queryNetBIOS(h.IPAddress)
-
-			// If NetBIOS fails, try SMB (port 445/TCP) for additional info
-			if !netbiosInfo.Available {
-				netbiosInfo = querySMBInfo(h.IPAddress)
-			}
 
 			if netbiosInfo.Available {
 				mu.Lock()
@@ -96,309 +100,289 @@ func ScanNetBIOS(hosts []network.HostStatus) NetBIOSResults {
 	}
 }
 
-// queryNetBIOS performs NetBIOS Name Service query (NBT-NS) on port 137/UDP
+// queryNetBIOS performs NetBIOS Name Service query (similar to csploit implementation)
 func queryNetBIOS(ipAddress string) NetBIOSInfo {
 	info := NetBIOSInfo{
 		IPAddress: ipAddress,
 		Available: false,
 	}
 
-	// Create NetBIOS Name Service query packet
-	// This is a simplified implementation of NBT-NS query
-	conn, err := net.DialTimeout("udp", fmt.Sprintf("%s:137", ipAddress), 3*time.Second)
+	// Create UDP connection to port 137 (NetBIOS Name Service)
+	conn, err := net.DialTimeout("udp", ipAddress+":137", 5*time.Second)
 	if err != nil {
 		return info
 	}
 	defer conn.Close()
 
-	// Set read timeout
-	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	// Set read deadline
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
 
-	// NetBIOS Name Query packet for "*" (wildcard query)
-	// This requests all NetBIOS names registered on the target
+	// Send NetBIOS query (csploit-style)
 	query := buildNetBIOSQuery()
-
 	_, err = conn.Write(query)
 	if err != nil {
 		return info
 	}
 
 	// Read response
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 4096)
 	n, err := conn.Read(buffer)
 	if err != nil {
 		return info
 	}
 
-	// Parse NetBIOS response
-	if n > 12 { // Minimum NetBIOS response size
-		parsed := parseNetBIOSResponse(buffer[:n])
-		if parsed.Hostname != "" {
-			info.Hostname = parsed.Hostname
-			info.OSInfo = parsed.OSInfo
-			info.Domain = parsed.Domain
-			info.Available = true
+	// Parse response
+	if n > 56 {
+		entries := parseNetBIOSResponse(buffer[:n])
+		if len(entries) > 0 {
+			info = extractInfoFromEntries(entries, ipAddress)
 		}
 	}
 
 	return info
 }
 
-// querySMBInfo tries to get hostname and OS info via SMB (port 445/TCP)
-func querySMBInfo(ipAddress string) NetBIOSInfo {
-	info := NetBIOSInfo{
-		IPAddress: ipAddress,
-		Available: false,
-	}
-
-	// Try to connect to SMB port 445
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:445", ipAddress), 5*time.Second)
-	if err != nil {
-		// Also try port 139 (NetBIOS Session Service)
-		conn, err = net.DialTimeout("tcp", fmt.Sprintf("%s:139", ipAddress), 5*time.Second)
-		if err != nil {
-			return info
-		}
-	}
-	defer conn.Close()
-
-	// Set read timeout
-	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-
-	// Send SMB negotiate request
-	negotiatePacket := buildSMBNegotiatePacket()
-	_, err = conn.Write(negotiatePacket)
-	if err != nil {
-		return info
-	}
-
-	// Read SMB response
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		return info
-	}
-
-	// Parse SMB response to extract OS information
-	if n > 32 { // Minimum SMB response size
-		parsed := parseSMBResponse(buffer[:n])
-		if parsed.Hostname != "" || parsed.OSInfo != "" {
-			info.Hostname = parsed.Hostname
-			info.OSInfo = parsed.OSInfo
-			info.Available = true
-		}
-	}
-
-	return info
-}
-
-// buildNetBIOSQuery creates a NetBIOS Name Service query packet
+// buildNetBIOSQuery creates a NetBIOS NBSTAT query packet
+// Based on csploit NetBIOS implementation approach
 func buildNetBIOSQuery() []byte {
-	// NetBIOS Name Service Query for "*" (all names)
-	// Transaction ID: 0x1234
-	// Flags: Standard Query (0x0100)
-	// Questions: 1
-	// Answer RRs: 0
-	// Authority RRs: 0
-	// Additional RRs: 0
-	// Query: * (wildcard)
-	query := []byte{
-		0x12, 0x34, // Transaction ID
-		0x01, 0x00, // Flags (Standard query)
-		0x00, 0x01, // Questions
-		0x00, 0x00, // Answer RRs
-		0x00, 0x00, // Authority RRs
-		0x00, 0x00, // Additional RRs
+	query := make([]byte, 50)
+	pos := 0
 
-		// Query for "*<00>" (Computer name)
-		0x20, // Length of encoded name (32 bytes)
+	// Transaction ID
+	binary.BigEndian.PutUint16(query[pos:], 0xABCD)
+	pos += 2
 
-		// Encoded NetBIOS name "*" padded to 15 chars + service type
-		0x43, 0x4b, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, // "CKAAAAAA"
-		0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, // "AAAAAAAA"
-		0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, // "AAAAAAAA"
-		0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, // "AAAAAAAA"
+	// Flags (0x0000 for query)
+	binary.BigEndian.PutUint16(query[pos:], 0x0000)
+	pos += 2
 
-		0x00,       // Name terminator
-		0x00, 0x21, // Type: NB (NetBIOS)
-		0x00, 0x01, // Class: IN
-	}
+	// Questions
+	binary.BigEndian.PutUint16(query[pos:], 0x0001)
+	pos += 2
 
-	return query
+	// Answer RRs
+	binary.BigEndian.PutUint16(query[pos:], 0x0000)
+	pos += 2
+
+	// Authority RRs
+	binary.BigEndian.PutUint16(query[pos:], 0x0000)
+	pos += 2
+
+	// Additional RRs
+	binary.BigEndian.PutUint16(query[pos:], 0x0000)
+	pos += 2
+
+	// Name length (32 bytes encoded + 1 length byte)
+	query[pos] = 0x20
+	pos++
+
+	// Encoded NetBIOS name "*" (wildcard)
+	// NetBIOS encoding: each half-byte becomes (value + 'A')
+	// '*' = 0x2A = 0010 1010 -> "CK"
+	// Pad with spaces (0x20 = 0010 0000 -> "CA")
+	encodedName := []byte("CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	copy(query[pos:], encodedName)
+	pos += 32
+
+	// Null terminator
+	query[pos] = 0x00
+	pos++
+
+	// Type: NBSTAT (0x0021)
+	binary.BigEndian.PutUint16(query[pos:], 0x0021)
+	pos += 2
+
+	// Class: IN (0x0001)
+	binary.BigEndian.PutUint16(query[pos:], 0x0001)
+	pos += 2
+
+	return query[:pos]
 }
 
-// buildSMBNegotiatePacket creates an SMB negotiate protocol request
-func buildSMBNegotiatePacket() []byte {
-	// SMB1 Protocol Negotiate Request
-	// This is a simplified SMB negotiate to trigger OS information disclosure
-	packet := []byte{
-		// NetBIOS Session Service header
-		0x00,             // Message type: Session message
-		0x00, 0x00, 0x2F, // Length (47 bytes)
+// parseNetBIOSResponse parses NetBIOS NBSTAT response
+func parseNetBIOSResponse(data []byte) []NetBIOSNameEntry {
+	var entries []NetBIOSNameEntry
 
-		// SMB Header
-		0xFF, 0x53, 0x4D, 0x42, // Protocol identifier "SMB"
-		0x72,                   // Command: Negotiate Protocol
-		0x00, 0x00, 0x00, 0x00, // Status
-		0x18,       // Flags
-		0x07, 0xC0, // Flags2
-		0x00, 0x00, // PID High
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Security signature
-		0x00, 0x00, // Reserved
-		0x00, 0x00, // TID
-		0x00, 0x00, // PID
-		0x00, 0x00, // UID
-		0x00, 0x00, // MID
-
-		// SMB Parameters
-		0x00, // Word count
-
-		// SMB Data
-		0x0C, 0x00, // Byte count
-		0x02,                                                             // Dialect list
-		0x4E, 0x54, 0x20, 0x4C, 0x4D, 0x20, 0x30, 0x2E, 0x31, 0x32, 0x00, // "NT LM 0.12"
+	if len(data) < 57 {
+		return entries
 	}
 
-	return packet
-}
-
-// parseNetBIOSResponse parses NetBIOS Name Service response
-func parseNetBIOSResponse(data []byte) NetBIOSInfo {
-	info := NetBIOSInfo{}
-
-	if len(data) < 12 {
-		return info
+	// Verify it's a response (bit 15 of flags should be set)
+	if (data[2] & 0x80) == 0 {
+		return entries
 	}
 
-	// Check if this is a valid NetBIOS response
-	if (data[2] & 0x80) == 0 { // Response flag should be set
-		return info
-	}
-
-	// Skip to the answer section
+	// Skip header (12 bytes)
 	offset := 12
 
-	// Skip the question section by finding the query name
+	// Skip question section
 	for offset < len(data) && data[offset] != 0 {
-		offset++
+		nameLen := int(data[offset])
+		if nameLen == 0 || nameLen > 63 {
+			break
+		}
+		offset += nameLen + 1
 	}
-	offset += 5 // Skip terminator + type + class
+	offset++ // null terminator
 
+	// Skip type and class
+	offset += 4
+
+	if offset+10 > len(data) {
+		return entries
+	}
+
+	// Skip answer name (2 bytes - pointer)
+	offset += 2
+
+	// Skip type (2), class (2), TTL (4)
+	offset += 8
+
+	// Data length
+	if offset+2 > len(data) {
+		return entries
+	}
+	offset += 2
+
+	// Number of names
 	if offset >= len(data) {
-		return info
+		return entries
+	}
+	numNames := int(data[offset])
+	offset++
+
+	// Parse name entries (18 bytes each)
+	for i := 0; i < numNames && offset+18 <= len(data); i++ {
+		// Extract name (15 bytes)
+		nameBytes := make([]byte, 15)
+		copy(nameBytes, data[offset:offset+15])
+
+		// Clean name
+		name := cleanNetBIOSName(string(nameBytes))
+
+		// Name type
+		nameType := data[offset+15]
+
+		// Flags
+		flags := binary.BigEndian.Uint16(data[offset+16 : offset+18])
+
+		if name != "" {
+			entries = append(entries, NetBIOSNameEntry{
+				Name:  name,
+				Type:  nameType,
+				Flags: flags,
+			})
+		}
+
+		offset += 18
 	}
 
-	// Parse answer records
-	for offset+12 < len(data) {
-		// Skip name pointer
-		if data[offset] >= 0xC0 {
-			offset += 2
-		} else {
-			// Skip full name
-			for offset < len(data) && data[offset] != 0 {
-				offset++
-			}
-			offset++
+	return entries
+}
+
+// cleanNetBIOSName cleans and validates a NetBIOS name
+func cleanNetBIOSName(name string) string {
+	// Trim spaces and null bytes
+	name = strings.TrimSpace(name)
+	name = strings.TrimRight(name, "\x00")
+
+	// Check if name is printable
+	for _, r := range name {
+		if r < 32 || r > 126 {
+			return ""
 		}
-
-		if offset+10 > len(data) {
-			break
-		}
-
-		recordType := (int(data[offset]) << 8) | int(data[offset+1])
-		dataLen := (int(data[offset+8]) << 8) | int(data[offset+9])
-		offset += 10
-
-		if offset+dataLen > len(data) {
-			break
-		}
-
-		if recordType == 0x0021 { // NB record type
-			// Parse NetBIOS names
-			for i := 0; i < dataLen; i += 18 {
-				if offset+i+18 > len(data) {
-					break
-				}
-
-				// Extract NetBIOS name (first 15 bytes)
-				name := strings.TrimSpace(string(data[offset+i : offset+i+15]))
-				nameType := data[offset+i+15]
-
-				// Name type 0x00 = Workstation/Computer name
-				// Name type 0x20 = Server service
-				if nameType == 0x00 && name != "" && !strings.HasPrefix(name, "__") {
-					info.Hostname = name
-				}
-
-				// Try to determine OS based on NetBIOS names
-				if strings.Contains(name, "MSBROWSE") || nameType == 0x01 {
-					info.OSInfo = "Windows"
-				}
-			}
-		}
-
-		offset += dataLen
 	}
 
-	// If we found a hostname, assume it's Windows
-	if info.Hostname != "" && info.OSInfo == "" {
-		info.OSInfo = "Windows"
+	// Filter out special markers
+	if strings.HasPrefix(name, "\x01\x02__MSBROWSE__") {
+		return ""
+	}
+
+	return name
+}
+
+// extractInfoFromEntries extracts hostname and OS info from NetBIOS entries
+func extractInfoFromEntries(entries []NetBIOSNameEntry, ipAddress string) NetBIOSInfo {
+	info := NetBIOSInfo{
+		IPAddress: ipAddress,
+		Available: true,
+		OSInfo:    "Windows",
+	}
+
+	for _, entry := range entries {
+		isGroup := (entry.Flags & 0x8000) != 0
+
+		switch entry.Type {
+		case 0x00: // Workstation/Computer Name or Domain/Workgroup
+			if !isGroup {
+				// Unique name = Computer name
+				if info.Hostname == "" {
+					info.Hostname = entry.Name
+				}
+			} else {
+				// Group name = Domain/Workgroup
+				if info.Domain == "" {
+					info.Domain = entry.Name
+				}
+			}
+
+		case 0x03: // Messenger Service
+			if info.Hostname == "" {
+				info.Hostname = entry.Name
+			}
+
+		case 0x20: // File Server Service
+			if info.Hostname == "" {
+				info.Hostname = entry.Name
+			}
+
+		case 0x1B: // Domain Master Browser
+			if info.Domain == "" {
+				info.Domain = entry.Name
+			}
+
+		case 0x1D: // Master Browser
+			if info.Domain == "" {
+				info.Domain = entry.Name
+			}
+
+		case 0x1E: // Browser Service Elections
+			// This confirms it's a Windows system
+			info.OSInfo = "Windows"
+		}
+	}
+
+	// Determine more specific Windows version if possible
+	if info.Hostname != "" {
+		info.OSInfo = determineWindowsVersion(entries)
 	}
 
 	return info
 }
 
-// parseSMBResponse parses SMB negotiate response for OS information
-func parseSMBResponse(data []byte) NetBIOSInfo {
-	info := NetBIOSInfo{}
+// determineWindowsVersion tries to determine Windows version from NetBIOS entries
+func determineWindowsVersion(entries []NetBIOSNameEntry) string {
+	hasFileServer := false
+	hasMasterBrowser := false
+	hasDomainMaster := false
 
-	if len(data) < 36 {
-		return info
-	}
-
-	// Check SMB signature
-	if !(data[4] == 0xFF && data[5] == 0x53 && data[6] == 0x4D && data[7] == 0x42) {
-		return info
-	}
-
-	// For SMB negotiate response, look for OS and LAN Manager strings
-	// These typically appear after the SMB header in the data section
-
-	dataStart := 32 // Skip NetBIOS header + SMB header
-
-	// Look for null-terminated strings that might contain OS info
-	for i := dataStart; i < len(data)-10; i++ {
-		if data[i] == 0 {
-			continue
+	for _, entry := range entries {
+		switch entry.Type {
+		case 0x20:
+			hasFileServer = true
+		case 0x1D:
+			hasMasterBrowser = true
+		case 0x1B:
+			hasDomainMaster = true
 		}
-
-		// Find the end of this string
-		end := i
-		for end < len(data) && data[end] != 0 {
-			end++
-		}
-
-		if end-i > 3 && end-i < 50 {
-			str := string(data[i:end])
-
-			// Look for Windows version indicators
-			if strings.Contains(strings.ToLower(str), "windows") {
-				info.OSInfo = str
-				break
-			} else if strings.Contains(strings.ToLower(str), "microsoft") {
-				info.OSInfo = "Windows"
-			} else if strings.Contains(str, "NT") && len(str) < 20 {
-				info.OSInfo = "Windows " + str
-			}
-		}
-
-		i = end
 	}
 
-	// If no specific version found but SMB responded, it's likely Windows
-	if info.OSInfo == "" {
-		info.OSInfo = "Windows"
+	// Basic heuristics
+	if hasDomainMaster {
+		return "Windows Server"
+	} else if hasMasterBrowser && hasFileServer {
+		return "Windows"
 	}
 
-	return info
+	return "Windows"
 }

@@ -73,16 +73,22 @@ func (m *Manager) MergeAllResults(hosts []network.HostStatus, portResults map[st
 			asset.CredTest = credTests
 		}
 
-		asset.MacVendor = "unknown"
-		asset.Type = "unknown"
-		asset.Hardware = "unknown"
+		// Enrich asset with intelligent detection
+		// MAC Vendor Lookup
+		asset.MacVendor = LookupMACVendor(asset.Mac)
 
-		// Set OS information from NetBIOS if available
-		if netbiosOS, found := netbiosOSInfo[host.IPAddress]; found && netbiosOS != "" {
-			asset.OS = netbiosOS
-		} else {
-			asset.OS = "unknown"
+		// OS Detection (uses NetBIOS, banners, ports, hostname, MAC vendor)
+		netbiosOSValue := ""
+		if osInfo, found := netbiosOSInfo[host.IPAddress]; found {
+			netbiosOSValue = osInfo
 		}
+		asset.OS = DetectOS(asset.Ports, netbiosOSValue, asset.Hostname, asset.MacVendor)
+
+		// Device Type Classification (uses ports, services, MAC vendor)
+		asset.Type = ClassifyDeviceType(asset.Ports, asset.MacVendor)
+
+		// Hardware Detection (uses MAC vendor, device type, OS, services)
+		asset.Hardware = DetectHardware(asset.MacVendor, asset.Type, asset.OS, asset.Ports)
 
 		assets = append(assets, asset)
 	}

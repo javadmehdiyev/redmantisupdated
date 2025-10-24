@@ -11,9 +11,55 @@ import (
 	"redmantis/internal/assets"
 )
 
-// Common ports to scan (both TCP and UDP - nmap will differentiate)
+// Top 50 most common ports for faster scanning
+// For full port scan, use nmap's --top-ports option separately
 var CommonPorts = []int{
-	21, 22, 23, 25, 53, 69, 80, 81, 88, 110, 111, 123, 135, 137, 139, 161, 177, 389, 427, 443, 445, 465, 500, 515, 520, 523, 548, 623, 626, 636, 873, 902, 1080, 1099, 1433, 1434, 1521, 1604, 1645, 1701, 1883, 1900, 2049, 2181, 2375, 2379, 2425, 3128, 3306, 3389, 4730, 5060, 5222, 5351, 5353, 5432, 5555, 5601, 5672, 5683, 5900, 5938, 5984, 6000, 6379, 7001, 7077, 8080, 8081, 8443, 8545, 8686, 9000, 9001, 9042, 9092, 9100, 9200, 9418, 9999, 11211, 27017, 33848, 37777, 50000, 50070, 61616, 5000, 7000,
+	21,    // FTP
+	22,    // SSH
+	23,    // Telnet
+	25,    // SMTP
+	53,    // DNS
+	80,    // HTTP
+	88,    // Kerberos
+	110,   // POP3
+	135,   // MSRPC
+	139,   // NetBIOS
+	143,   // IMAP
+	443,   // HTTPS
+	445,   // SMB
+	993,   // IMAPS
+	995,   // POP3S
+	1433,  // MSSQL
+	3306,  // MySQL
+	3389,  // RDP
+	5432,  // PostgreSQL
+	5900,  // VNC
+	6379,  // Redis
+	8080,  // HTTP-alt
+	8443,  // HTTPS-alt
+	27017, // MongoDB
+	// Additional common ports
+	161,   // SNMP
+	389,   // LDAP
+	636,   // LDAPS
+	1521,  // Oracle
+	2049,  // NFS
+	5000,  // UPnP
+	5353,  // mDNS
+	5672,  // AMQP
+	7000,  // Cassandra
+	8000,  // HTTP-alt
+	8081,  // HTTP-alt
+	8888,  // HTTP-alt
+	9000,  // Various
+	9042,  // Cassandra CQL
+	9090,  // Prometheus
+	9200,  // Elasticsearch
+	9300,  // Elasticsearch
+	9999,  // Various
+	11211, // Memcached
+	50000, // SAP
+	50070, // Hadoop
 }
 
 // NmapXMLResult represents the XML structure returned by nmap
@@ -57,11 +103,11 @@ func ScanPorts(ipAddress string, portList []int) []assets.PortResult {
 
 	// Build nmap command with XML output
 	cmd := exec.Command("nmap",
-		"-sS",                // SYN scan
-		"-sV",                // Version detection
-		"-O",                 // OS detection
-		"-T4",                // Aggressive timing (faster)
-		"--min-rate", "1000", // Minimum packet rate
+		"-sS",                   // SYN scan (TCP)
+		"-sV",                   // Version detection
+		"-T4",                   // Aggressive timing (T5 can be unreliable)
+		"--host-timeout", "60s", // Max time per host
+		"--max-retries", "1", // Reduce retries for speed
 		"-p", portStr, // Port list
 		"-oX", "-", // XML output to stdout
 		ipAddress)
@@ -141,8 +187,10 @@ func ScanPorts(ipAddress string, portList []int) []assets.PortResult {
 // ScanMultiple scans multiple IP addresses using the common port list
 func ScanMultiple(ips []net.IP) []assets.PortResult {
 	var allResults []assets.PortResult
+	total := len(ips)
 
-	for _, ip := range ips {
+	for i, ip := range ips {
+		fmt.Printf("  [%d/%d] Scanning %s...\n", i+1, total, ip.String())
 		results := ScanPorts(ip.String(), CommonPorts)
 		allResults = append(allResults, results...)
 	}

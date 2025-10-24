@@ -25,8 +25,8 @@
     },
     "port_scan": {
         "enabled": true,
-        "timeout": ".5s",
-        "workers": 200
+        "timeout": "2s",
+        "workers": 20
     },
     "files": {
         "ip_list_file": "list.txt",
