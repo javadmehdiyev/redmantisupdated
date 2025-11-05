@@ -3,7 +3,6 @@ package discovery
 import (
 	"fmt"
 	"net"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -19,23 +18,15 @@ import (
 
 // Orchestrator coordinates all scanning activities
 type Orchestrator struct {
-	config     *config.Config
-	assetMgr   *assets.Manager
-	credClient *credentials.Client
+	config   *config.Config
+	assetMgr *assets.Manager
 }
 
 // NewOrchestrator creates a new scanning orchestrator
 func NewOrchestrator(cfg *config.Config) *Orchestrator {
-	// Credential scanner API URL - can be configured via environment variable
-	credentialAPIURL := "http://localhost:8081"
-	if envURL := os.Getenv("CREDENTIAL_SCANNER_URL"); envURL != "" {
-		credentialAPIURL = envURL
-	}
-
 	return &Orchestrator{
-		config:     cfg,
-		assetMgr:   assets.NewManager(),
-		credClient: credentials.NewClient(credentialAPIURL),
+		config:   cfg,
+		assetMgr: assets.NewManager(),
 	}
 }
 
@@ -184,25 +175,42 @@ func (o *Orchestrator) Run() {
 
 	fmt.Println("\n=== Phase 0: Passive Network Discovery ===")
 
-	fmt.Println("Starting mDNS discovery in parallel...")
+	// mDNS discovery (configurable)
 	var mdnsResults *DiscoveryResult
 	var mdnsWg sync.WaitGroup
 
-	mdnsWg.Add(1)
-	go func() {
-		defer mdnsWg.Done()
-		mdnsResults = ScanMDNS()
-	}()
+	if o.config.MDNS.Enabled {
+		fmt.Printf("mDNS configuration: timeout=%s, retries=%d, concurrency=%d\n",
+			o.config.MDNS.Timeout, o.config.MDNS.Retries, o.config.MDNS.Concurrency)
+
+		mdnsWg.Add(1)
+		go func() {
+			defer mdnsWg.Done()
+			mdnsResults = ScanMDNS()
+		}()
+	} else {
+		fmt.Println("mDNS discovery is disabled in configuration, skipping...")
+		mdnsResults = &DiscoveryResult{
+			Services:     make([]ServiceInfo, 0),
+			Hosts:        make([]HostInfo, 0),
+			ServiceTypes: make(map[string]int),
+			Timestamp:    time.Now(),
+		}
+	}
 
 	passiveResults, err := ScanPassive(primary, 20*time.Second)
 	if err != nil {
 		fmt.Printf("Error during passive discovery: %v - continuing with active scanning\n", err)
 	}
 
-	mdnsWg.Wait()
+	if o.config.MDNS.Enabled {
+		mdnsWg.Wait()
+	}
 
 	passiveHostCount := len(passiveResults.Hosts)
+	mdnsHostCount := len(mdnsResults.Hosts)
 	fmt.Printf("Passive discovery found %d hosts\n", passiveHostCount)
+	fmt.Printf("mDNS discovery found %d hosts with hostnames\n", mdnsHostCount)
 
 	fmt.Println("\n=== Phase 1: ARP Scanning ===")
 
@@ -288,8 +296,8 @@ func (o *Orchestrator) Run() {
 				}
 			}
 
-			// Perform port scanning
-			portResults := scanning.ScanMultiple(ips)
+			// Perform port scanning with config timeout and workers
+			portResults := scanning.ScanMultiple(ips, o.config.GetPortScanTimeout(), o.config.PortScan.Workers)
 
 			// Convert PortResult to PortScanResult format
 			portScanResults = make(map[string][]assets.PortScanResult)
@@ -394,8 +402,23 @@ func (o *Orchestrator) Run() {
 	// Create temporary assets for credential testing (with NetBIOS info)
 	tempAssets := o.assetMgr.MergeAllResults(finalHosts, portScanResults, hostnameMap, netbiosHostnames, netbiosOSInfo, make(map[string][]assets.CredentialTest))
 
-	// Perform credential testing
-	credentialResults := o.credClient.ScanAllAssets(tempAssets)
+	// Perform credential testing with new native Go tester
+	var credentialResults map[string][]assets.CredentialTest
+
+	if o.config.Credentials.Enabled {
+		credTester, err := credentials.NewTester(o.config)
+		if err != nil {
+			fmt.Printf("Warning: Failed to initialize credential tester: %v\n", err)
+			fmt.Println("Skipping credential testing...")
+			credentialResults = make(map[string][]assets.CredentialTest)
+		} else {
+			credentialResults = credTester.TestAllAssets(tempAssets)
+		}
+	} else {
+		fmt.Println("\n=== Phase 8: Credential Testing ===")
+		fmt.Println("Credential testing is disabled in configuration, skipping...")
+		credentialResults = make(map[string][]assets.CredentialTest)
+	}
 
 	// Merge all results including credential tests (with NetBIOS info)
 	finalAssets := o.assetMgr.MergeAllResults(finalHosts, portScanResults, hostnameMap, netbiosHostnames, netbiosOSInfo, credentialResults)

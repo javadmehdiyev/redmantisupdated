@@ -32,6 +32,13 @@ type Config struct {
 		Workers int    `json:"workers"`
 	} `json:"netbios"`
 
+	MDNS struct {
+		Enabled     bool   `json:"enabled"`
+		Timeout     string `json:"timeout"`
+		Retries     int    `json:"retries"`
+		Concurrency int    `json:"concurrency"`
+	} `json:"mdns"`
+
 	PortScan struct {
 		Enabled bool   `json:"enabled"`
 		Timeout string `json:"timeout"`
@@ -39,9 +46,18 @@ type Config struct {
 	} `json:"port_scan"`
 
 	Files struct {
-		IPListFile string `json:"ip_list_file"`
-		OutputFile string `json:"output_file"`
+		IPListFile   string `json:"ip_list_file"`
+		OutputFile   string `json:"output_file"`
+		SettingsFile string `json:"settings_file"`
 	} `json:"files"`
+
+	Credentials struct {
+		Enabled      bool   `json:"enabled"`
+		SettingsFile string `json:"settings_file"`
+		Timeout      string `json:"timeout"`
+		Workers      int    `json:"workers"`
+		TestDefault  bool   `json:"test_default_creds"`
+	} `json:"credentials"`
 }
 
 // GetARPTimeout returns the ARP timeout as a time.Duration
@@ -92,4 +108,24 @@ func (c *Config) GetScanInterval() time.Duration {
 		return 5 * time.Minute
 	}
 	return interval
+}
+
+// GetCredentialTimeout returns the credential testing timeout as a time.Duration
+func (c *Config) GetCredentialTimeout() time.Duration {
+	timeout, err := time.ParseDuration(c.Credentials.Timeout)
+	if err != nil {
+		// Default to 10 seconds if parsing fails
+		return 10 * time.Second
+	}
+	return timeout
+}
+
+// GetMDNSTimeout returns the mDNS timeout as a time.Duration
+func (c *Config) GetMDNSTimeout() time.Duration {
+	timeout, err := time.ParseDuration(c.MDNS.Timeout)
+	if err != nil {
+		// Default to 12 seconds if parsing fails
+		return 12 * time.Second
+	}
+	return timeout
 }

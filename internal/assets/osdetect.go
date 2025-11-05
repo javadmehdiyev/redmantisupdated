@@ -73,7 +73,10 @@ func detectOSFromBanners(ports []PortScanResult) string {
 		return "macOS"
 	}
 
-	// Windows - check versions first (most specific)
+	// Windows - check versions first (most specific to generic)
+	if strings.Contains(text, "windows server 2025") {
+		return "Windows Server 2025"
+	}
 	if strings.Contains(text, "windows server 2022") {
 		return "Windows Server 2022"
 	}
@@ -83,6 +86,18 @@ func detectOSFromBanners(ports []PortScanResult) string {
 	if strings.Contains(text, "windows server 2016") {
 		return "Windows Server 2016"
 	}
+	if strings.Contains(text, "windows server 2012 r2") {
+		return "Windows Server 2012 R2"
+	}
+	if strings.Contains(text, "windows server 2012") {
+		return "Windows Server 2012"
+	}
+	if strings.Contains(text, "windows server 2008 r2") {
+		return "Windows Server 2008 R2"
+	}
+	if strings.Contains(text, "windows server 2008") {
+		return "Windows Server 2008"
+	}
 	if strings.Contains(text, "windows server") {
 		return "Windows Server"
 	}
@@ -91,6 +106,15 @@ func detectOSFromBanners(ports []PortScanResult) string {
 	}
 	if strings.Contains(text, "windows 10") || strings.Contains(text, "win10") {
 		return "Windows 10"
+	}
+	if strings.Contains(text, "windows 8.1") {
+		return "Windows 8.1"
+	}
+	if strings.Contains(text, "windows 8") {
+		return "Windows 8"
+	}
+	if strings.Contains(text, "windows 7") {
+		return "Windows 7"
 	}
 
 	// Windows - generic indicators
@@ -109,17 +133,38 @@ func detectOSFromBanners(ports []PortScanResult) string {
 	}
 
 	// Linux - distributions (specific to generic)
+	if strings.Contains(text, "ubuntu 24.04") || strings.Contains(text, "noble") {
+		return "Linux (Ubuntu 24.04 LTS)"
+	}
+	if strings.Contains(text, "ubuntu 22.04") || strings.Contains(text, "jammy") {
+		return "Linux (Ubuntu 22.04 LTS)"
+	}
+	if strings.Contains(text, "ubuntu 20.04") || strings.Contains(text, "focal") {
+		return "Linux (Ubuntu 20.04 LTS)"
+	}
 	if strings.Contains(text, "ubuntu") {
 		return "Linux (Ubuntu)"
 	}
+	if strings.Contains(text, "debian 12") || strings.Contains(text, "bookworm") {
+		return "Linux (Debian 12)"
+	}
+	if strings.Contains(text, "debian 11") || strings.Contains(text, "bullseye") {
+		return "Linux (Debian 11)"
+	}
 	if strings.Contains(text, "debian") {
 		return "Linux (Debian)"
+	}
+	if strings.Contains(text, "centos 8") || strings.Contains(text, "centos stream") {
+		return "Linux (CentOS Stream)"
+	}
+	if strings.Contains(text, "centos 7") {
+		return "Linux (CentOS 7)"
 	}
 	if strings.Contains(text, "centos") {
 		return "Linux (CentOS)"
 	}
 	if strings.Contains(text, "red hat") || strings.Contains(text, "rhel") {
-		return "Linux (Red Hat)"
+		return "Linux (Red Hat Enterprise)"
 	}
 	if strings.Contains(text, "fedora") {
 		return "Linux (Fedora)"
@@ -127,8 +172,23 @@ func detectOSFromBanners(ports []PortScanResult) string {
 	if strings.Contains(text, "alpine") {
 		return "Linux (Alpine)"
 	}
-	if strings.Contains(text, "arch linux") {
+	if strings.Contains(text, "arch") {
 		return "Linux (Arch)"
+	}
+	if strings.Contains(text, "suse") || strings.Contains(text, "opensuse") {
+		return "Linux (SUSE)"
+	}
+	if strings.Contains(text, "kali") {
+		return "Linux (Kali)"
+	}
+	if strings.Contains(text, "mint") {
+		return "Linux (Mint)"
+	}
+	if strings.Contains(text, "manjaro") {
+		return "Linux (Manjaro)"
+	}
+	if strings.Contains(text, "gentoo") {
+		return "Linux (Gentoo)"
 	}
 	if strings.Contains(text, "linux") {
 		return "Linux"
@@ -153,12 +213,40 @@ func detectOSFromBanners(ports []PortScanResult) string {
 		return "Unix"
 	}
 
-	// Network OS
-	if strings.Contains(text, "cisco") {
-		return "IOS"
+	// Network OS & Embedded Systems
+	if strings.Contains(text, "cisco ios") {
+		return "Cisco IOS"
 	}
 	if strings.Contains(text, "fortinet") || strings.Contains(text, "fortios") {
 		return "FortiOS"
+	}
+	if strings.Contains(text, "junos") {
+		return "Junos OS"
+	}
+	if strings.Contains(text, "panos") || strings.Contains(text, "pan-os") {
+		return "PAN-OS"
+	}
+	if strings.Contains(text, "openwrt") {
+		return "OpenWrt"
+	}
+	if strings.Contains(text, "ddwrt") || strings.Contains(text, "dd-wrt") {
+		return "DD-WRT"
+	}
+	if strings.Contains(text, "mikrotik") || strings.Contains(text, "routeros") {
+		return "RouterOS"
+	}
+
+	// Container/VM OS
+	if strings.Contains(text, "docker") {
+		return "Docker Container"
+	}
+	if strings.Contains(text, "kubernetes") {
+		return "Kubernetes Pod"
+	}
+
+	// ESXi/VMware
+	if strings.Contains(text, "esxi") || strings.Contains(text, "vmware esx") {
+		return "VMware ESXi"
 	}
 
 	return ""
@@ -249,7 +337,7 @@ func detectOSFromPorts(ports []PortScanResult) string {
 
 	if hasSSH && hasNoWindowsPorts {
 		// SSH + web server = likely Linux
-		if portMap[80] || portMap[443] || portMap[8080] {
+		if portMap[80] || portMap[443] || portMap[8080] || portMap[8000] {
 			return "Linux"
 		}
 		// SSH + database = likely Linux
@@ -257,19 +345,58 @@ func detectOSFromPorts(ports []PortScanResult) string {
 			portMap[6379] || portMap[9042] || portMap[9200] {
 			return "Linux"
 		}
+		// SSH + container/orchestration = Linux
+		if portMap[2375] || portMap[2376] || portMap[6443] || portMap[10250] {
+			return "Linux (Container Host)"
+		}
 		// SSH + NFS = Linux
 		if portMap[2049] {
 			return "Linux"
+		}
+		// SSH + monitoring = Linux server
+		if portMap[9090] || portMap[9100] || portMap[10050] {
+			return "Linux (Server)"
 		}
 		// Just SSH without Windows = likely Linux/Unix
 		return "Linux/Unix"
 	}
 
-	// 4. OTHER INDICATORS
+	// 4. CONTAINER & ORCHESTRATION INDICATORS
+
+	// Kubernetes ports
+	if portMap[6443] || portMap[10250] || portMap[10255] {
+		return "Linux (Kubernetes)"
+	}
+
+	// Docker ports
+	if portMap[2375] || portMap[2376] || portMap[2377] {
+		return "Linux (Docker Host)"
+	}
+
+	// 5. NETWORK DEVICE INDICATORS
+
+	// SNMP + no typical server ports = network device
+	if portMap[161] && !portMap[22] && !portMap[80] && hasNoWindowsPorts {
+		return "Network Device OS"
+	}
+
+	// 6. MACOS INDICATORS
 
 	// Kerberos (port 88) without Windows ports = macOS
 	if portMap[88] && hasNoWindowsPorts {
 		return "macOS"
+	}
+
+	// AFP = macOS
+	if portMap[548] {
+		return "macOS"
+	}
+
+	// 7. OTHER UNIX/BSD
+
+	// X11 without Linux SSH = BSD/Unix
+	if (portMap[6000] || portMap[6001]) && !hasSSH {
+		return "BSD/Unix"
 	}
 
 	return ""

@@ -31,6 +31,23 @@ func ClassifyDeviceType(ports []PortScanResult, macVendor string) string {
 
 	var types []string
 
+	// Priority detection order (most specific first)
+
+	// Check for container/orchestration hosts
+	if isContainerHost(portMap, serviceMap) {
+		types = append(types, "Container Host")
+	}
+
+	// Check for Kubernetes
+	if isKubernetes(portMap, serviceMap) {
+		types = append(types, "Kubernetes Node")
+	}
+
+	// Check for virtualization
+	if isVirtualizationHost(portMap, serviceMap) {
+		types = append(types, "Virtualization Host")
+	}
+
 	// Check for printer
 	if isPrinter(portMap, serviceMap) {
 		types = append(types, "Printer")
@@ -66,6 +83,21 @@ func ClassifyDeviceType(ports []PortScanResult, macVendor string) string {
 		types = append(types, "DNS Server")
 	}
 
+	// Check for message queue server
+	if isMessageQueue(portMap, serviceMap) {
+		types = append(types, "Message Queue Server")
+	}
+
+	// Check for monitoring/management server
+	if isMonitoringServer(portMap, serviceMap) {
+		types = append(types, "Monitoring Server")
+	}
+
+	// Check for proxy/load balancer
+	if isProxy(portMap, serviceMap) {
+		types = append(types, "Proxy/Load Balancer")
+	}
+
 	// Check for workstation/desktop
 	if isWorkstation(portMap, serviceMap) {
 		types = append(types, "Workstation")
@@ -92,6 +124,129 @@ func ClassifyDeviceType(ports []PortScanResult, macVendor string) string {
 	}
 
 	return strings.Join(types, ", ")
+}
+
+// isContainerHost detects Docker/container hosts
+func isContainerHost(portMap map[int]bool, serviceMap map[string]bool) bool {
+	dockerPorts := []int{2375, 2376, 2377, 4243}
+	for _, port := range dockerPorts {
+		if portMap[port] {
+			return true
+		}
+	}
+
+	containerServices := []string{"docker", "container", "containerd"}
+	for _, svc := range containerServices {
+		if containsService(serviceMap, svc) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isKubernetes detects Kubernetes nodes
+func isKubernetes(portMap map[int]bool, serviceMap map[string]bool) bool {
+	k8sPorts := []int{6443, 10250, 10255, 10256, 8001}
+	count := 0
+	for _, port := range k8sPorts {
+		if portMap[port] {
+			count++
+		}
+	}
+
+	// If 2+ Kubernetes ports open
+	if count >= 2 {
+		return true
+	}
+
+	k8sServices := []string{"kubernetes", "kubelet", "kube-proxy", "k8s"}
+	for _, svc := range k8sServices {
+		if containsService(serviceMap, svc) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isVirtualizationHost detects virtualization platforms
+func isVirtualizationHost(portMap map[int]bool, serviceMap map[string]bool) bool {
+	vmPorts := []int{902, 903, 5000} // VMware, Docker Registry
+	for _, port := range vmPorts {
+		if portMap[port] {
+			return true
+		}
+	}
+
+	vmServices := []string{"vmware", "esxi", "vcenter", "vsphere", "hyper-v", "kvm", "xen", "proxmox"}
+	for _, svc := range vmServices {
+		if containsService(serviceMap, svc) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isMonitoringServer detects monitoring/management servers
+func isMonitoringServer(portMap map[int]bool, serviceMap map[string]bool) bool {
+	monitoringPorts := []int{9090, 9100, 9115, 10050, 10051, 3000, 5601, 8086}
+	count := 0
+	for _, port := range monitoringPorts {
+		if portMap[port] {
+			count++
+		}
+	}
+
+	if count >= 2 {
+		return true
+	}
+
+	monitoringServices := []string{"prometheus", "grafana", "zabbix", "nagios", "icinga", "kibana", "influxdb", "telegraf"}
+	for _, svc := range monitoringServices {
+		if containsService(serviceMap, svc) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isMessageQueue(portMap map[int]bool, serviceMap map[string]bool) bool {
+	mqPorts := []int{1883, 5672, 9092, 61613, 61616, 15672, 4369}
+	for _, port := range mqPorts {
+		if portMap[port] {
+			return true
+		}
+	}
+
+	mqServices := []string{"rabbitmq", "kafka", "activemq", "mqtt", "amqp", "stomp"}
+	for _, svc := range mqServices {
+		if containsService(serviceMap, svc) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isProxy(portMap map[int]bool, serviceMap map[string]bool) bool {
+	proxyPorts := []int{1080, 3128, 8118, 9999}
+	for _, port := range proxyPorts {
+		if portMap[port] {
+			return true
+		}
+	}
+
+	proxyServices := []string{"squid", "proxy", "haproxy", "nginx", "varnish", "traefik"}
+	for _, svc := range proxyServices {
+		if containsService(serviceMap, svc) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func isPrinter(portMap map[int]bool, serviceMap map[string]bool) bool {
@@ -167,14 +322,20 @@ func getDatabaseType(portMap map[int]bool, serviceMap map[string]bool) string {
 
 	// Then check port numbers (less reliable)
 	databases := map[int]string{
+		1433:  "MSSQL Server",
+		1521:  "Oracle Server",
+		3050:  "Firebird Server",
 		3306:  "MySQL Server",
 		5432:  "PostgreSQL Server",
-		27017: "MongoDB Server",
-		6379:  "Redis Server",
-		1433:  "MSSQL Server",
 		5984:  "CouchDB Server",
+		6379:  "Redis Server",
+		7000:  "Cassandra Server",
+		7199:  "Cassandra Server",
+		8086:  "InfluxDB Server",
 		9042:  "Cassandra Server",
 		9200:  "Elasticsearch Server",
+		27017: "MongoDB Server",
+		28015: "RethinkDB Server",
 	}
 
 	for port, dbType := range databases {

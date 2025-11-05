@@ -1,0 +1,174 @@
+{
+    "default": {
+        "scan_status": true,
+        "dc": "123.21.117.94"
+    },
+    "notify_settings": {
+        "to": "tehmezovismayil@gmail.com",
+        "asset_detection": null,
+        "port_detection": null,
+        "security_product": true,
+        "security_issue": true,
+        "access_board": true
+    },
+    "port_scanner": {
+        "thread": 2,
+        "rate": "1000",
+        "range": "1-1000",
+        "os_service_control_rate": "3",
+        "re_port_scan_rate": "3"
+    },
+    "smtp": {
+        "port": 465,
+        "smtp": "smtp.yandex.com",
+        "username": "redmantissec@yandex.com",
+        "password": "$JOUS$ZjRQSXlUV3Z1ak1xWkF0WXljQ01nVEJFVURXeFBVOW1FRWxlMm9VdDBrdz0=$",
+        "encryption": "Tls"
+    },
+    "local_hunter": {
+        "thread": 2,
+        "scan_rate": 5
+    },
+    "waf_scanner": {
+        "scan_rate": 5,
+        "owasp_top_10_scanners": {
+            "xss": true,
+            "sqlinjection": false,
+            "ldap": false,
+            "rce": false,
+            "oscommand": true,
+            "xml": true,
+            "html": true
+        }
+    },
+    "default_creds": {
+        "company_creds_1": [
+            "Company Creds 1"
+        ],
+        "default_usernames_for_services": [
+            "admin",
+            "test",
+            "guest",
+            "musteri"
+        ],
+        "default_password_for_services": [
+            "admin",
+            "test",
+            "root",
+            "test2"
+        ],
+        "default_combines_for_services": [
+            "admin:admin",
+            "root:root",
+            "tomcat:tomcat",
+            "admin:123456",
+            "root:toor",
+            ".:.",
+            "++"
+        ],
+        "ssh_users": [
+            "root",
+            "guest",
+            "anonymouse",
+            "misafir",
+            "workuser",
+            "homeusera"
+        ],
+        "ftp_users": [
+            "root",
+            "guest",
+            "anonymouse",
+            "misafir",
+            "workuser",
+            "homeuser"
+        ],
+        "rdp_users": [
+            "aa",
+            "root",
+            "misafir"
+        ]
+    },
+    "access_control": {
+        "web_categories": {
+            "adult": [
+                [
+                    "https://pornhub.com",
+                    "porn",
+                    "pornhub",
+                    "asas"
+                ],
+                [
+                    "https://xnxx.com",
+                    "xnxx videos",
+                    "porn"
+                ],
+                [
+                    "https://xvideos.com",
+                    "xvideos",
+                    "porn"
+                ],
+                [
+                    "https://www.xhamster.com",
+                    "hamster",
+                    "porn"
+                ],
+                [
+                    "https://www.redtube.com",
+                    "red",
+                    "tube",
+                    "porn"
+                ]
+            ],
+            "gambling": [
+                [
+                    "https:www.stake.com",
+                    "bonanaza",
+                    "casino",
+                    "live casino"
+                ],
+                [
+                    "https:www.stake.com1",
+                    "bonanaza3",
+                    "casino2",
+                    "live casina"
+                ],
+                [
+                    "adsfas",
+                    "sdsdsd"
+                ],
+                [
+                    "daaffsa",
+                    "sfafaf"
+                ]
+            ],
+            "malware": [
+                [
+                    "https://github.com",
+                    "github.community",
+                    "services.github",
+                    "support.github.com"
+                ],
+                [
+                    "sffsfasd",
+                    "asasasas",
+                    "adadadad"
+                ]
+            ]
+        },
+        "blocked_ip_blocks": [
+            "10.23.24.25",
+            "10.25.21.10/26"
+        ],
+        "blocked_web_adr": [
+            "https://google.com",
+            "http://evil.com",
+            "https://gambling.com"
+        ],
+        "check_interval": true,
+        "last_adult_control": "2025-06-29T17:39:20.989404Z",
+        "last_gambling_control": "2025-06-29T17:39:25.108758",
+        "last_malware_control": "2025-06-29T17:39:27.248456Z",
+        "last_run": "2025-03-18T02:56:49.011627Z",
+        "db_update_time": null
+    }
+}

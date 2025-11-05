@@ -47,7 +47,7 @@ func detectHardwareFromVendor(macVendor, deviceType, os string) string {
 		return "Apple Device"
 	}
 
-	// Mobile phone vendors
+	// Mobile phone vendors (Expanded)
 	mobileVendors := map[string]string{
 		"samsung":        "Samsung Mobile Device",
 		"huawei":         "Huawei Mobile Device",
@@ -56,6 +56,15 @@ func detectHardwareFromVendor(macVendor, deviceType, os string) string {
 		"google":         "Google Pixel Device",
 		"lg electronics": "LG Mobile Device",
 		"motorola":       "Motorola Device",
+		"nokia":          "Nokia Device",
+		"sony mobile":    "Sony Xperia",
+		"htc":            "HTC Device",
+		"oppo":           "OPPO Device",
+		"vivo":           "Vivo Device",
+		"realme":         "Realme Device",
+		"honor":          "Honor Device",
+		"zte":            "ZTE Device",
+		"tcl":            "TCL Device",
 	}
 
 	for vendor, hardware := range mobileVendors {

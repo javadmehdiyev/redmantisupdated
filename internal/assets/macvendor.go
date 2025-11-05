@@ -107,3 +107,5 @@ func LookupMACVendorsBatch(macAddresses []string) map[string]string {
 
 	return results
 }
+
+

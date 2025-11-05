@@ -23,6 +23,12 @@
         "timeout": "3s",
         "workers": 20
     },
+    "mdns": {
+        "enabled": true,
+        "timeout": "12s",
+        "retries": 3,
+        "concurrency": 10
+    },
     "port_scan": {
         "enabled": true,
         "timeout": "2s",
@@ -30,6 +36,14 @@
     },
     "files": {
         "ip_list_file": "list.txt",
-        "output_file": "assets.json"
+        "output_file": "assets.json",
+        "settings_file": "settings.json"
+    },
+    "credentials": {
+        "enabled": true,
+        "settings_file": "settings.json",
+        "timeout": "10s",
+        "workers": 5,
+        "test_default_creds": true
     }
 }
