@@ -35,6 +35,7 @@ func TestSSH(ip string, port int, creds []Credential, timeout time.Duration) []a
 			client.Close()
 			results = append(results, assets.CredentialTest{
 				Service:  "ssh",
+				Port:     port,
 				Username: cred.Username,
 				Password: cred.Password,
 				Success:  true,
@@ -87,6 +88,7 @@ func TestFTP(ip string, port int, creds []Credential, timeout time.Duration) []a
 			if strings.Contains(response, "230") {
 				results = append(results, assets.CredentialTest{
 					Service:  "ftp",
+					Port:     port,
 					Username: cred.Username,
 					Password: cred.Password,
 					Success:  true,
@@ -117,6 +119,7 @@ func TestMySQL(ip string, port int, creds []Credential, timeout time.Duration) [
 			if err == nil {
 				results = append(results, assets.CredentialTest{
 					Service:  "mysql",
+					Port:     port,
 					Username: cred.Username,
 					Password: cred.Password,
 					Success:  true,
@@ -147,6 +150,7 @@ func TestPostgreSQL(ip string, port int, creds []Credential, timeout time.Durati
 			if err == nil {
 				results = append(results, assets.CredentialTest{
 					Service:  "postgresql",
+					Port:     port,
 					Username: cred.Username,
 					Password: cred.Password,
 					Success:  true,
@@ -194,6 +198,7 @@ func TestHTTP(ip string, port int, creds []Credential, timeout time.Duration, us
 					strings.Contains(response, "HTTP/1.1 30") {
 					results = append(results, assets.CredentialTest{
 						Service:  "http",
+						Port:     port,
 						Username: cred.Username,
 						Password: cred.Password,
 						Success:  true,
@@ -246,6 +251,7 @@ func TestTelnet(ip string, port int, creds []Credential, timeout time.Duration) 
 				!strings.Contains(response, "Access denied") {
 				results = append(results, assets.CredentialTest{
 					Service:  "telnet",
+					Port:     port,
 					Username: cred.Username,
 					Password: cred.Password,
 					Success:  true,

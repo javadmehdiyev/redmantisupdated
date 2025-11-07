@@ -29,6 +29,7 @@ type PortScanResult struct {
 // CredentialTest represents credential testing information
 type CredentialTest struct {
 	Service  string `json:"service"`
+	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Success  bool   `json:"success"`

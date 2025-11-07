@@ -538,7 +538,7 @@ func (o *Orchestrator) printAssetSummary(finalAssets []assets.Asset) {
 				fmt.Printf("  ⚠️  Vulnerable Credentials: %d\n", vulnerableCount)
 				for _, credTest := range asset.CredTest {
 					if credTest.Success {
-						fmt.Printf("    - %s:%s (%s)\n", credTest.Username, credTest.Password, credTest.Service)
+						fmt.Printf("    - %s:%s (%s:%d)\n", credTest.Username, credTest.Password, credTest.Service, credTest.Port)
 					}
 				}
 			}
