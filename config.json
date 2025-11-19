@@ -45,5 +45,12 @@
         "timeout": "10s",
         "workers": 5,
         "test_default_creds": true
+    },
+    "nuclei": {
+        "enabled": true,
+        "severity": ["critical", "high", "medium"],
+        "rate_limit": 10,
+        "concurrency": 25,
+        "timeout": "30s"
     }
 }

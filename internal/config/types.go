@@ -58,6 +58,14 @@ type Config struct {
 		Workers      int    `json:"workers"`
 		TestDefault  bool   `json:"test_default_creds"`
 	} `json:"credentials"`
+
+	Nuclei struct {
+		Enabled     bool     `json:"enabled"`
+		Severity    []string `json:"severity"`
+		RateLimit   int      `json:"rate_limit"`
+		Concurrency int      `json:"concurrency"`
+		Timeout     string   `json:"timeout"`
+	} `json:"nuclei"`
 }
 
 // GetARPTimeout returns the ARP timeout as a time.Duration
@@ -126,6 +134,19 @@ func (c *Config) GetMDNSTimeout() time.Duration {
 	if err != nil {
 		// Default to 12 seconds if parsing fails
 		return 12 * time.Second
+	}
+	return timeout
+}
+
+// GetNucleiTimeout returns the Nuclei scan timeout as a time.Duration
+func (c *Config) GetNucleiTimeout() time.Duration {
+	if c.Nuclei.Timeout == "" {
+		return 30 * time.Second
+	}
+	timeout, err := time.ParseDuration(c.Nuclei.Timeout)
+	if err != nil {
+		// Default to 30 seconds if parsing fails
+		return 30 * time.Second
 	}
 	return timeout
 }
