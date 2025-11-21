@@ -13,7 +13,6 @@ import (
 	"redmantis/internal/scanning"
 )
 
-// NucleiAsset представляет актив с результатами Nuclei сканирования
 type NucleiAsset struct {
 	assets.Asset
 	NucleiVulnerabilities []scanning.NucleiResult `json:"nuclei_vulnerabilities,omitempty"`
@@ -27,7 +26,7 @@ func main() {
 	// Найти корень проекта для загрузки config.json
 	projectRoot := findProjectRoot()
 	fmt.Printf("🔍 Project root detected: %s\n", projectRoot)
-	
+
 	configPath := filepath.Join(projectRoot, "config.json")
 	fmt.Printf("📄 Config path: %s\n", configPath)
 
@@ -65,30 +64,30 @@ func main() {
 	}
 
 	fmt.Printf("📂 Assets file path: %s\n", assetsFile)
-	
+
 	// Проверить существование файла
 	if _, err := os.Stat(assetsFile); os.IsNotExist(err) {
 		fmt.Printf("\n❌ Error: File not found: %s\n", assetsFile)
 		fmt.Printf("Project root: %s\n", projectRoot)
-		
+
 		// Показать, что было проверено
 		fmt.Println("\nChecked paths:")
 		fmt.Printf("  - %s\n", assetsFile)
 		if cfg.Files.OutputFile != "" {
 			fmt.Printf("  - %s (from config)\n", cfg.Files.OutputFile)
 		}
-		
+
 		// Показать текущую рабочую директорию
 		if wd, err := os.Getwd(); err == nil {
 			fmt.Printf("\nCurrent working directory: %s\n", wd)
 		}
-		
+
 		// Показать, где находится config.json (если найден)
 		if _, err := os.Stat(configPath); err == nil {
 			fmt.Printf("Config.json found at: %s\n", configPath)
 			fmt.Println("\n💡 Tip: Make sure assets.json is in the same directory as config.json")
 		}
-		
+
 		fmt.Println("\nPlease run RedMantis scanner first to generate assets.json:")
 		fmt.Println("  sudo ./redmantis")
 		os.Exit(1)
