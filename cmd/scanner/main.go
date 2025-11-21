@@ -12,15 +12,11 @@ import (
 )
 
 func main() {
-	// Load existing logs
 	allLogs := loadLogs()
-
-	// Create new log entry
 	logData := LogEntry{
 		StartTime: time.Now().Format(time.RFC3339),
 		Messages:  []string{},
 	}
-
 	// Multi writer → console only (we'll save to JSON at the end)
 	capture := &MultiWriter{
 		file:     nil, // Don't write to file directly
@@ -31,6 +27,7 @@ func main() {
 	// Redirect log package to capture logs
 	log.SetOutput(capture)
 
+	log.Println("============================")
 	log.Println("=== Program started ===")
 
 	// Load configuration
@@ -46,6 +43,7 @@ func main() {
 	orchestrator.Run()
 
 	log.Println("=== Program finished ===")
+	log.Println("============================")
 
 	// Finish logs
 	logData.EndTime = time.Now().Format(time.RFC3339)
@@ -58,7 +56,6 @@ func main() {
 		allLogs = allLogs[:15]
 	}
 
-	// Save all logs to file
 	saveLogs(allLogs)
 
 	log.Println("Logs saved -> scan_logs.json")
