@@ -12,7 +12,7 @@ import (
 	"redmantis/internal/assets"
 )
 
-// NucleiResult представляет результат сканирования Nuclei
+// NucleiResult represents a Nuclei scan result
 type NucleiResult struct {
 	TemplateID string `json:"template-id"`
 	MatchedAt  string `json:"matched-at"`
@@ -25,7 +25,7 @@ type NucleiResult struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// NucleiScanner представляет сканер Nuclei
+// NucleiScanner represents a Nuclei scanner
 type NucleiScanner struct {
 	templatesPath string
 	rateLimit     int
@@ -34,7 +34,7 @@ type NucleiScanner struct {
 	severity      []string
 }
 
-// NewNucleiScanner создает новый экземпляр NucleiScanner
+// NewNucleiScanner creates a new NucleiScanner instance
 func NewNucleiScanner() *NucleiScanner {
 	return &NucleiScanner{
 		rateLimit:   10,
@@ -44,43 +44,43 @@ func NewNucleiScanner() *NucleiScanner {
 	}
 }
 
-// SetSeverity устанавливает уровни серьезности для сканирования
+// SetSeverity sets severity levels for scanning
 func (ns *NucleiScanner) SetSeverity(severity []string) {
 	ns.severity = severity
 }
 
-// SetRateLimit устанавливает лимит запросов в секунду
+// SetRateLimit sets the request rate limit per second
 func (ns *NucleiScanner) SetRateLimit(limit int) {
 	ns.rateLimit = limit
 }
 
-// SetConcurrency устанавливает количество одновременных запросов
+// SetConcurrency sets the number of concurrent requests
 func (ns *NucleiScanner) SetConcurrency(concurrency int) {
 	ns.concurrency = concurrency
 }
 
-// SetTimeout устанавливает таймаут для сканирования
+// SetTimeout sets the timeout for scanning
 func (ns *NucleiScanner) SetTimeout(timeout time.Duration) {
 	ns.timeout = timeout
 }
 
-// ScanAssets сканирует веб-сервисы из списка активов
+// ScanAssets scans web services from the asset list
 func (ns *NucleiScanner) ScanAssets(assetList []assets.Asset) ([]NucleiResult, error) {
-	// Извлечь веб-сервисы из активов
+	// Extract web services from assets
 	targets := ns.extractWebTargets(assetList)
 
 	if len(targets) == 0 {
 		return nil, fmt.Errorf("no web services found in assets")
 	}
 
-	// Создать временный файл с целями
+	// Create temporary file with targets
 	targetsFile, err := ns.createTargetsFile(targets)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create targets file: %w", err)
 	}
 	defer os.Remove(targetsFile)
 
-	// Запустить Nuclei
+	// Run Nuclei
 	results, err := ns.runNuclei(targetsFile)
 	if err != nil {
 		return nil, fmt.Errorf("nuclei scan failed: %w", err)
@@ -89,7 +89,7 @@ func (ns *NucleiScanner) ScanAssets(assetList []assets.Asset) ([]NucleiResult, e
 	return results, nil
 }
 
-// extractWebTargets извлекает веб-сервисы из списка активов
+// extractWebTargets extracts web services from the asset list
 func (ns *NucleiScanner) extractWebTargets(assetList []assets.Asset) []string {
 	var targets []string
 	seen := make(map[string]bool)
@@ -121,7 +121,7 @@ func (ns *NucleiScanner) extractWebTargets(assetList []assets.Asset) []string {
 				url = fmt.Sprintf("http://%s:%d", asset.Address, port.Number)
 			}
 
-			// Избежать дубликатов
+			// Avoid duplicates
 			if !seen[url] {
 				targets = append(targets, url)
 				seen[url] = true
@@ -132,7 +132,7 @@ func (ns *NucleiScanner) extractWebTargets(assetList []assets.Asset) []string {
 	return targets
 }
 
-// createTargetsFile создает временный файл со списком целей
+// createTargetsFile creates a temporary file with the list of targets
 func (ns *NucleiScanner) createTargetsFile(targets []string) (string, error) {
 	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("nuclei_targets_%d.txt", time.Now().UnixNano()))
 
@@ -151,21 +151,21 @@ func (ns *NucleiScanner) createTargetsFile(targets []string) (string, error) {
 	return tmpFile, nil
 }
 
-// runNuclei запускает Nuclei и возвращает результаты
+// runNuclei runs Nuclei and returns results
 func (ns *NucleiScanner) runNuclei(targetsFile string) ([]NucleiResult, error) {
-	// Проверить наличие Nuclei
+	// Check if Nuclei is available
 	if _, err := exec.LookPath("nuclei"); err != nil {
 		return nil, fmt.Errorf("nuclei not found in PATH: %w", err)
 	}
 
-	// Создать временный файл для результатов
+	// Create temporary file for results
 	resultsFile := filepath.Join(os.TempDir(), fmt.Sprintf("nuclei_results_%d.json", time.Now().UnixNano()))
 	defer os.Remove(resultsFile)
 
-	// Построить команду Nuclei
+	// Build Nuclei command
 	args := []string{
 		"-list", targetsFile,
-		"-jsonl", // Используем -jsonl вместо -json (новая версия Nuclei)
+		"-jsonl", // Use -jsonl instead of -json (new Nuclei version)
 		"-o", resultsFile,
 		"-rate-limit", fmt.Sprintf("%d", ns.rateLimit),
 		"-c", fmt.Sprintf("%d", ns.concurrency),
@@ -176,20 +176,20 @@ func (ns *NucleiScanner) runNuclei(targetsFile string) ([]NucleiResult, error) {
 		args = append(args, "-severity", strings.Join(ns.severity, ","))
 	}
 
-	// Запустить Nuclei
+	// Run Nuclei
 	cmd := exec.Command("nuclei", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		// Nuclei может вернуть ошибку, но результаты все равно могут быть доступны
-		// Проверим, существует ли файл результатов
+		// Nuclei may return an error, but results may still be available
+		// Check if results file exists
 		if _, statErr := os.Stat(resultsFile); statErr != nil {
 			return nil, fmt.Errorf("nuclei execution failed: %w", err)
 		}
 	}
 
-	// Прочитать результаты
+	// Read results
 	results, err := ns.parseResults(resultsFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse results: %w", err)
@@ -198,7 +198,7 @@ func (ns *NucleiScanner) runNuclei(targetsFile string) ([]NucleiResult, error) {
 	return results, nil
 }
 
-// parseResults парсит JSON результаты Nuclei
+// parseResults parses JSON results from Nuclei
 func (ns *NucleiScanner) parseResults(resultsFile string) ([]NucleiResult, error) {
 	data, err := os.ReadFile(resultsFile)
 	if err != nil {
@@ -220,7 +220,7 @@ func (ns *NucleiScanner) parseResults(resultsFile string) ([]NucleiResult, error
 
 		var result NucleiResult
 		if err := json.Unmarshal([]byte(line), &result); err != nil {
-			// Пропустить невалидные строки
+			// Skip invalid lines
 			continue
 		}
 
@@ -230,7 +230,7 @@ func (ns *NucleiScanner) parseResults(resultsFile string) ([]NucleiResult, error
 	return results, nil
 }
 
-// FormatResults форматирует результаты для вывода
+// FormatResults formats results for output
 func (ns *NucleiScanner) FormatResults(results []NucleiResult) string {
 	if len(results) == 0 {
 		return "No vulnerabilities found"
@@ -239,7 +239,7 @@ func (ns *NucleiScanner) FormatResults(results []NucleiResult) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("\n=== Nuclei Scan Results: %d vulnerabilities found ===\n\n", len(results)))
 
-	// Группировать по серьезности
+	// Group by severity
 	bySeverity := make(map[string][]NucleiResult)
 	for _, result := range results {
 		severity := result.Info.Severity
@@ -249,7 +249,7 @@ func (ns *NucleiScanner) FormatResults(results []NucleiResult) string {
 		bySeverity[severity] = append(bySeverity[severity], result)
 	}
 
-	// Вывести по порядку серьезности
+	// Output by severity order
 	severityOrder := []string{"critical", "high", "medium", "low", "info", "unknown"}
 	for _, sev := range severityOrder {
 		if vulns, ok := bySeverity[sev]; ok {
