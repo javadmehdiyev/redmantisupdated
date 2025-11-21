@@ -23,12 +23,9 @@ func main() {
 		console:  os.Stdout,
 		logStore: &logData.Messages,
 	}
-
 	// Redirect log package to capture logs
 	log.SetOutput(capture)
-
-	log.Println("============================")
-	log.Println("=== Program started ===")
+	log.Println()
 
 	// Load configuration
 	cfg, err := config.Load("config.json")
@@ -45,19 +42,14 @@ func main() {
 	log.Println("=== Program finished ===")
 	log.Println("============================")
 
-	// Finish logs
 	logData.EndTime = time.Now().Format(time.RFC3339)
-
-	// Add new log to the beginning of the array
 	allLogs = append([]LogEntry{logData}, allLogs...)
 
 	// Keep only last 15 logs
 	if len(allLogs) > 15 {
 		allLogs = allLogs[:15]
 	}
-
 	saveLogs(allLogs)
-
 	log.Println("Logs saved -> scan_logs.json")
 }
 
