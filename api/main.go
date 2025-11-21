@@ -41,6 +41,8 @@ func main() {
 	r.GET("/assets", assetHandler.GetAssets)
 	r.GET("/assets/:ip", assetHandler.GetAssetByIP)
 
+	r.GET("/assets/logs", assetHandler.GetAssetLogs)
+
 	// Start server
 	r.Run(":8080")
 }

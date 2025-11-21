@@ -20,13 +20,25 @@ import (
 type Orchestrator struct {
 	config   *config.Config
 	assetMgr *assets.Manager
+	logger   func(string) // Manual logger function for capturing fmt.Printf/fmt.Println calls
 }
 
 // NewOrchestrator creates a new scanning orchestrator
-func NewOrchestrator(cfg *config.Config) *Orchestrator {
+func NewOrchestrator(cfg *config.Config, logger func(string)) *Orchestrator {
 	return &Orchestrator{
 		config:   cfg,
 		assetMgr: assets.NewManager(),
+		logger:   logger,
+	}
+}
+
+// log manually logs a message if logger is set, otherwise uses fmt.Printf
+func (o *Orchestrator) log(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if o.logger != nil {
+		o.logger(msg)
+	} else {
+		fmt.Print(msg)
 	}
 }
 
@@ -54,7 +66,7 @@ func (o *Orchestrator) identifyNetBIOSHosts(hosts []network.HostStatus, portResu
 			for _, port := range ports {
 				if port.State == "open" && netbiosPorts[port.Number] {
 					hasNetBIOSPort = true
-					fmt.Printf("Found NetBIOS/SMB port %d open on %s\n", port.Number, host.IPAddress)
+					o.log("Found NetBIOS/SMB port %d open on %s\n", port.Number, host.IPAddress)
 					break
 				}
 			}
@@ -74,16 +86,16 @@ func (o *Orchestrator) identifyNetBIOSHosts(hosts []network.HostStatus, portResu
 // Exports results to JSON format for further analysis and API consumption.
 func (o *Orchestrator) Run() {
 	// Print header
-	fmt.Println("RedMantis v2 - Network Scanner")
-	fmt.Println("==============================")
-	fmt.Println()
+	o.log("RedMantis v2 - Network Scanner\n")
+	o.log("==============================\n")
+	o.log("\n")
 
-	fmt.Printf("Loaded configuration for: %s\n", o.config.Service.Name)
-	fmt.Printf("Network interface mode: %s\n", o.config.Network.Interface)
+	o.log("Loaded configuration for: %s\n", o.config.Service.Name)
+	o.log("Network interface mode: %s\n", o.config.Network.Interface)
 	if o.config.Network.AutoDetectLocal {
-		fmt.Println("Auto-detecting local network configuration...")
+		o.log("Auto-detecting local network configuration...\n")
 	}
-	fmt.Println()
+	o.log("\n")
 
 	// Get network interface based on configuration
 	var primary network.NetworkInfo
@@ -92,16 +104,16 @@ func (o *Orchestrator) Run() {
 		// Auto-detect primary interface
 		interfaces, err := network.GetInterfaces()
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			o.log("Error: %v\n", err)
 			return
 		}
 		primary = network.GetPrimary(interfaces)
-		fmt.Printf("Auto-detected network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
+		o.log("Auto-detected network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
 	} else if o.config.Network.Interface != "auto" {
 		// Use specified interface
 		interfaces, err := network.GetInterfaces()
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			o.log("Error: %v\n", err)
 			return
 		}
 
@@ -116,24 +128,24 @@ func (o *Orchestrator) Run() {
 		}
 
 		if !found {
-			fmt.Printf("Error: Specified interface '%s' not found\n", o.config.Network.Interface)
-			fmt.Println("Available interfaces:")
+			o.log("Error: Specified interface '%s' not found\n", o.config.Network.Interface)
+			o.log("Available interfaces:\n")
 			for _, iface := range interfaces {
-				fmt.Printf("  - %s (%s)\n", iface.InterfaceName, iface.IPAddress)
+				o.log("  - %s (%s)\n", iface.InterfaceName, iface.IPAddress)
 			}
 			return
 		}
 
-		fmt.Printf("Using specified network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
+		o.log("Using specified network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
 	} else {
 		// Fallback to auto-detection
 		interfaces, err := network.GetInterfaces()
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			o.log("Error: %v\n", err)
 			return
 		}
 		primary = network.GetPrimary(interfaces)
-		fmt.Printf("Using network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
+		o.log("Using network interface: %s (%s)\n", primary.InterfaceName, primary.IPAddress)
 	}
 
 	// Initialize host lists
@@ -143,22 +155,22 @@ func (o *Orchestrator) Run() {
 	if o.config.Network.ScanLocalNetwork {
 		networkHosts, err := network.GetNetworkHosts(primary.NetworkCIDR)
 		if err != nil {
-			fmt.Printf("Error getting hosts from network %s: %v\n", primary.NetworkCIDR, err)
+			o.log("Error getting hosts from network %s: %v\n", primary.NetworkCIDR, err)
 		} else {
 			allHosts = append(allHosts, networkHosts...)
-			fmt.Printf("Added %d hosts from network %s\n", len(networkHosts), primary.NetworkCIDR)
+			o.log("Added %d hosts from network %s\n", len(networkHosts), primary.NetworkCIDR)
 		}
 	}
 
 	// Add file-based hosts if enabled
 	if o.config.Network.ScanFileList && o.config.Files.IPListFile != "" {
-		fmt.Printf("Loading hosts from file: %s\n", o.config.Files.IPListFile)
+		o.log("Loading hosts from file: %s\n", o.config.Files.IPListFile)
 		fileHosts, err := LoadHostsFromFile(o.config.Files.IPListFile)
 		if err != nil {
-			fmt.Printf("Warning: Could not load hosts from %s: %v\n", o.config.Files.IPListFile, err)
+			o.log("Warning: Could not load hosts from %s: %v\n", o.config.Files.IPListFile, err)
 		} else {
 			allHosts = append(allHosts, fileHosts...)
-			fmt.Printf("Added %d hosts from file %s\n", len(fileHosts), o.config.Files.IPListFile)
+			o.log("Added %d hosts from file %s\n", len(fileHosts), o.config.Files.IPListFile)
 		}
 	}
 
@@ -166,21 +178,21 @@ func (o *Orchestrator) Run() {
 	hosts := MergeHosts(allHosts)
 
 	if len(hosts) == 0 {
-		fmt.Println("No hosts to scan. Check configuration settings.")
+		o.log("No hosts to scan. Check configuration settings.\n")
 		return
 	}
 
-	fmt.Printf("Scanning %d unique hosts total...\n", len(hosts))
-	fmt.Println("Starting comprehensive multi-technique scanning for better host discovery...")
+	o.log("Scanning %d unique hosts total...\n", len(hosts))
+	o.log("Starting comprehensive multi-technique scanning for better host discovery...\n")
 
-	fmt.Println("\n=== Phase 0: Passive Network Discovery ===")
+	o.log("\n=== Phase 0: Passive Network Discovery ===\n")
 
 	// mDNS discovery (configurable)
 	var mdnsResults *DiscoveryResult
 	var mdnsWg sync.WaitGroup
 
 	if o.config.MDNS.Enabled {
-		fmt.Printf("mDNS configuration: timeout=%s, retries=%d, concurrency=%d\n",
+		o.log("mDNS configuration: timeout=%s, retries=%d, concurrency=%d\n",
 			o.config.MDNS.Timeout, o.config.MDNS.Retries, o.config.MDNS.Concurrency)
 
 		mdnsWg.Add(1)
@@ -189,7 +201,7 @@ func (o *Orchestrator) Run() {
 			mdnsResults = ScanMDNS()
 		}()
 	} else {
-		fmt.Println("mDNS discovery is disabled in configuration, skipping...")
+		o.log("mDNS discovery is disabled in configuration, skipping...\n")
 		mdnsResults = &DiscoveryResult{
 			Services:     make([]ServiceInfo, 0),
 			Hosts:        make([]HostInfo, 0),
@@ -200,7 +212,7 @@ func (o *Orchestrator) Run() {
 
 	passiveResults, err := ScanPassive(primary, 20*time.Second)
 	if err != nil {
-		fmt.Printf("Error during passive discovery: %v - continuing with active scanning\n", err)
+		o.log("Error during passive discovery: %v - continuing with active scanning\n", err)
 	}
 
 	if o.config.MDNS.Enabled {
@@ -209,28 +221,28 @@ func (o *Orchestrator) Run() {
 
 	passiveHostCount := len(passiveResults.Hosts)
 	mdnsHostCount := len(mdnsResults.Hosts)
-	fmt.Printf("Passive discovery found %d hosts\n", passiveHostCount)
-	fmt.Printf("mDNS discovery found %d hosts with hostnames\n", mdnsHostCount)
+	o.log("Passive discovery found %d hosts\n", passiveHostCount)
+	o.log("mDNS discovery found %d hosts with hostnames\n", mdnsHostCount)
 
-	fmt.Println("\n=== Phase 1: ARP Scanning ===")
+	o.log("\n=== Phase 1: ARP Scanning ===\n")
 
 	var arpResults ArpScanResults
 
 	if !o.config.ARP.Enabled {
-		fmt.Println("ARP scanning is disabled in configuration, skipping...")
+		o.log("ARP scanning is disabled in configuration, skipping...\n")
 		// Create empty results for consistency
 		arpResults = ArpScanResults{
 			Hosts:    make([]network.HostStatus, 0),
 			Duration: 0,
 		}
 	} else {
-		fmt.Printf("ARP scan configuration: timeout=%s, workers=%d, rate_limit=%s\n",
+		o.log("ARP scan configuration: timeout=%s, workers=%d, rate_limit=%s\n",
 			o.config.ARP.Timeout, o.config.ARP.Workers, o.config.ARP.RateLimit)
 
 		var err error
 		arpResults, err = ScanARP(hosts, primary, o.config.GetARPTimeout())
 		if err != nil {
-			fmt.Printf("Error during ARP scan: %v\n", err)
+			o.log("Error during ARP scan: %v\n", err)
 			return
 		}
 	}
@@ -244,40 +256,40 @@ func (o *Orchestrator) Run() {
 	}
 
 	if o.config.ARP.Enabled {
-		fmt.Printf("\nARP scan found %d alive hosts\n", arpAliveCount)
+		o.log("\nARP scan found %d alive hosts\n", arpAliveCount)
 	}
 
-	fmt.Println("\n=== Phase 2: ICMP Ping Scanning ===")
+	o.log("\n=== Phase 2: ICMP Ping Scanning ===\n")
 	pingResults, err := ScanPing(hosts)
 	if err != nil {
-		fmt.Printf("Error during ICMP scan: %v - continuing with ARP results only\n", err)
+		o.log("Error during ICMP scan: %v - continuing with ARP results only\n", err)
 	}
 
 	mergedHosts := o.assetMgr.MergeARPAndPingResults(arpResults.Hosts, pingResults.Hosts)
 
-	fmt.Println("\n=== Phase 3: TCP Port Scanning ===")
+	o.log("\n=== Phase 3: TCP Port Scanning ===\n")
 	tcpScannedHosts := ScanTCP(mergedHosts)
 
-	fmt.Println("\n=== Phase 4: SYN Scanning (Advanced) ===")
+	o.log("\n=== Phase 4: SYN Scanning (Advanced) ===\n")
 	activeScannedHosts, err := ScanSYN(tcpScannedHosts, primary)
 	if err != nil {
-		fmt.Printf("Error during SYN scan: %v - continuing with previous results\n", err)
+		o.log("Error during SYN scan: %v - continuing with previous results\n", err)
 		activeScannedHosts = tcpScannedHosts
 	}
 
 	finalHosts := o.assetMgr.MergePassiveAndActiveResults(passiveResults.Hosts, activeScannedHosts, primary.NetworkCIDR)
 
-	fmt.Println("\n=== Phase 5: Advanced Port Scanning ===")
+	o.log("\n=== Phase 5: Advanced Port Scanning ===\n")
 
 	var portScanResults map[string][]assets.PortScanResult
 
 	if !o.config.PortScan.Enabled {
-		fmt.Println("Port scanning is disabled in configuration, skipping...")
+		o.log("Port scanning is disabled in configuration, skipping...\n")
 		portScanResults = make(map[string][]assets.PortScanResult)
 	} else {
-		fmt.Printf("Port scan configuration: timeout=%s, workers=%d\n",
+		o.log("Port scan configuration: timeout=%s, workers=%d\n",
 			o.config.PortScan.Timeout, o.config.PortScan.Workers)
-		fmt.Println("Performing comprehensive port scanning on discovered hosts...")
+		o.log("Performing comprehensive port scanning on discovered hosts...\n")
 
 		// Get alive hosts for port scanning
 		var aliveHosts []network.HostStatus
@@ -323,35 +335,35 @@ func (o *Orchestrator) Run() {
 					totalOpenPorts += len(ports)
 				}
 			}
-			fmt.Printf("Port scan completed: Found %d open ports on %d hosts\n", totalOpenPorts, hostsWithOpenPorts)
+			o.log("Port scan completed: Found %d open ports on %d hosts\n", totalOpenPorts, hostsWithOpenPorts)
 		} else {
-			fmt.Println("No alive hosts found for port scanning")
+			o.log("No alive hosts found for port scanning\n")
 			portScanResults = make(map[string][]assets.PortScanResult)
 		}
 	}
 
-	fmt.Println("\n=== Phase 6: NetBIOS Discovery ===")
+	o.log("\n=== Phase 6: NetBIOS Discovery ===\n")
 
 	var netbiosResults NetBIOSResults
 
 	if !o.config.NetBIOS.Enabled {
-		fmt.Println("NetBIOS scanning is disabled in configuration, skipping...")
+		o.log("NetBIOS scanning is disabled in configuration, skipping...\n")
 		netbiosResults = NetBIOSResults{
 			Hosts:    make(map[string]NetBIOSInfo),
 			Duration: 0,
 		}
 	} else {
-		fmt.Printf("NetBIOS scan configuration: timeout=%s, workers=%d\n",
+		o.log("NetBIOS scan configuration: timeout=%s, workers=%d\n",
 			o.config.NetBIOS.Timeout, o.config.NetBIOS.Workers)
 
 		// First identify hosts with NetBIOS/SMB ports open
 		netbiosHosts := o.identifyNetBIOSHosts(finalHosts, portScanResults)
 
 		if len(netbiosHosts) > 0 {
-			fmt.Printf("Found %d hosts with NetBIOS/SMB ports open, scanning for Windows info...\n", len(netbiosHosts))
+			o.log("Found %d hosts with NetBIOS/SMB ports open, scanning for Windows info...\n", len(netbiosHosts))
 			netbiosResults = ScanNetBIOS(netbiosHosts)
 		} else {
-			fmt.Println("No hosts found with NetBIOS/SMB ports open")
+			o.log("No hosts found with NetBIOS/SMB ports open\n")
 			netbiosResults = NetBIOSResults{
 				Hosts:    make(map[string]NetBIOSInfo),
 				Duration: 0,
@@ -374,7 +386,7 @@ func (o *Orchestrator) Run() {
 	}
 
 	if windowsCount > 0 {
-		fmt.Printf("NetBIOS Discovery Summary: Found %d Windows hosts with %d hostnames\n", windowsCount, hostnameCount)
+		o.log("NetBIOS Discovery Summary: Found %d Windows hosts with %d hostnames\n", windowsCount, hostnameCount)
 	}
 
 	// Create hostname mapping from mDNS results
@@ -408,15 +420,15 @@ func (o *Orchestrator) Run() {
 	if o.config.Credentials.Enabled {
 		credTester, err := credentials.NewTester(o.config)
 		if err != nil {
-			fmt.Printf("Warning: Failed to initialize credential tester: %v\n", err)
-			fmt.Println("Skipping credential testing...")
+			o.log("Warning: Failed to initialize credential tester: %v\n", err)
+			o.log("Skipping credential testing...\n")
 			credentialResults = make(map[string][]assets.CredentialTest)
 		} else {
 			credentialResults = credTester.TestAllAssets(tempAssets)
 		}
 	} else {
-		fmt.Println("\n=== Phase 8: Credential Testing ===")
-		fmt.Println("Credential testing is disabled in configuration, skipping...")
+		o.log("\n=== Phase 8: Credential Testing ===\n")
+		o.log("Credential testing is disabled in configuration, skipping...\n")
 		credentialResults = make(map[string][]assets.CredentialTest)
 	}
 
@@ -424,7 +436,7 @@ func (o *Orchestrator) Run() {
 	finalAssets := o.assetMgr.MergeAllResults(finalHosts, portScanResults, hostnameMap, netbiosHostnames, netbiosOSInfo, credentialResults)
 
 	// Phase 7: Screenshot Capture for Web Services
-	fmt.Println("\n=== Phase 7: Screenshot Capture ===")
+	o.log("\n=== Phase 7: Screenshot Capture ===\n")
 	screenshotService := screenshot.NewService(15*time.Second, 5) // 15s timeout, 5 concurrent workers
 	finalAssets = screenshotService.CaptureScreenshots(finalAssets)
 
@@ -435,17 +447,17 @@ func (o *Orchestrator) Run() {
 		}
 	}
 
-	fmt.Printf("\n🎯 Final Asset Discovery Results:\n")
-	fmt.Printf("=====================================\n")
-	fmt.Printf("Multi-technique scan completed\n")
-	fmt.Printf("Found %d alive hosts out of %d total hosts\n\n", aliveCount, len(finalHosts))
+	o.log("\n🎯 Final Asset Discovery Results:\n")
+	o.log("=====================================\n")
+	o.log("Multi-technique scan completed\n")
+	o.log("Found %d alive hosts out of %d total hosts\n\n", aliveCount, len(finalHosts))
 
 	if len(finalAssets) > 0 {
 		o.printAssetSummary(finalAssets)
 
 		err := assets.ExportToJSON(finalAssets, o.config)
 		if err != nil {
-			fmt.Printf("Error exporting to JSON: %v\n", err)
+			o.log("Error exporting to JSON: %v\n", err)
 		}
 	}
 
@@ -453,8 +465,8 @@ func (o *Orchestrator) Run() {
 }
 
 func (o *Orchestrator) printAssetSummary(finalAssets []assets.Asset) {
-	fmt.Printf("📋 Asset Inventory Summary:\n")
-	fmt.Printf("============================\n")
+	o.log("📋 Asset Inventory Summary:\n")
+	o.log("============================\n")
 
 	deviceTypes := make(map[string]int)
 	hostsWithNames := 0
@@ -489,41 +501,41 @@ func (o *Orchestrator) printAssetSummary(finalAssets []assets.Asset) {
 		}
 	}
 
-	fmt.Printf("Total Assets: %d\n", len(finalAssets))
-	fmt.Printf("Resolved Hostnames: %d\n", hostsWithNames)
-	fmt.Printf("Total Open Ports: %d\n", totalPorts)
-	fmt.Printf("Vulnerable Credentials: %d\n", totalVulnerableCredentials)
-	fmt.Printf("Hosts with Vulnerabilities: %d\n", hostsWithVulnerabilities)
-	fmt.Println("\nDevice Types:")
+	o.log("Total Assets: %d\n", len(finalAssets))
+	o.log("Resolved Hostnames: %d\n", hostsWithNames)
+	o.log("Total Open Ports: %d\n", totalPorts)
+	o.log("Vulnerable Credentials: %d\n", totalVulnerableCredentials)
+	o.log("Hosts with Vulnerabilities: %d\n", hostsWithVulnerabilities)
+	o.log("\nDevice Types:\n")
 	for deviceType, count := range deviceTypes {
-		fmt.Printf("  %s: %d\n", deviceType, count)
+		o.log("  %s: %d\n", deviceType, count)
 	}
 
-	fmt.Printf("\n📱 Sample Assets (first 5):\n")
-	fmt.Printf("============================\n")
+	o.log("\n📱 Sample Assets (first 5):\n")
+	o.log("============================\n")
 	for i, asset := range finalAssets {
 		if i >= 5 {
 			break
 		}
-		fmt.Printf("Asset %d:\n", i+1)
-		fmt.Printf("  IP: %s\n", asset.Address)
-		fmt.Printf("  Hostname: %s\n", asset.Hostname)
-		fmt.Printf("  Type: %s\n", asset.Type)
-		fmt.Printf("  OS: %s\n", asset.OS)
-		fmt.Printf("  Hardware: %s\n", asset.Hardware)
-		fmt.Printf("  MAC Vendor: %s\n", asset.MacVendor)
-		fmt.Printf("  Open Ports: %d\n", len(asset.Ports))
+		o.log("Asset %d:\n", i+1)
+		o.log("  IP: %s\n", asset.Address)
+		o.log("  Hostname: %s\n", asset.Hostname)
+		o.log("  Type: %s\n", asset.Type)
+		o.log("  OS: %s\n", asset.OS)
+		o.log("  Hardware: %s\n", asset.Hardware)
+		o.log("  MAC Vendor: %s\n", asset.MacVendor)
+		o.log("  Open Ports: %d\n", len(asset.Ports))
 		if len(asset.Ports) > 0 {
-			fmt.Printf("  Services: ")
+			o.log("  Services: ")
 			for j, port := range asset.Ports {
 				if j < 3 { // Show first 3 services
-					fmt.Printf("%s(%d) ", port.Service, port.Number)
+					o.log("%s(%d) ", port.Service, port.Number)
 				}
 			}
 			if len(asset.Ports) > 3 {
-				fmt.Printf("...")
+				o.log("...")
 			}
-			fmt.Println()
+			o.log("\n")
 		}
 
 		// Show credential vulnerabilities
@@ -535,25 +547,25 @@ func (o *Orchestrator) printAssetSummary(finalAssets []assets.Asset) {
 				}
 			}
 			if vulnerableCount > 0 {
-				fmt.Printf("  ⚠️  Vulnerable Credentials: %d\n", vulnerableCount)
+				o.log("  ⚠️  Vulnerable Credentials: %d\n", vulnerableCount)
 				for _, credTest := range asset.CredTest {
 					if credTest.Success {
-						fmt.Printf("    - %s:%s (%s:%d)\n", credTest.Username, credTest.Password, credTest.Service, credTest.Port)
+						o.log("    - %s:%s (%s:%d)\n", credTest.Username, credTest.Password, credTest.Service, credTest.Port)
 					}
 				}
 			}
 		}
-		fmt.Println()
+		o.log("\n")
 	}
 
 	if len(finalAssets) > 5 {
-		fmt.Printf("... and %d more assets\n", len(finalAssets)-5)
+		o.log("... and %d more assets\n", len(finalAssets)-5)
 	}
 }
 
 func (o *Orchestrator) printScanSummary(passiveHostCount, arpAliveCount int, pingResults PingScanResults, tcpScannedHosts, activeScannedHosts []network.HostStatus, aliveCount int, finalHosts []network.HostStatus) {
-	fmt.Printf("Passive discovery: %d hosts\n", passiveHostCount)
-	fmt.Printf("ARP scan: %d hosts\n", arpAliveCount)
+	o.log("Passive discovery: %d hosts\n", passiveHostCount)
+	o.log("ARP scan: %d hosts\n", arpAliveCount)
 
 	pingAliveCount := 0
 	for _, host := range pingResults.Hosts {
@@ -561,7 +573,7 @@ func (o *Orchestrator) printScanSummary(passiveHostCount, arpAliveCount int, pin
 			pingAliveCount++
 		}
 	}
-	fmt.Printf("ICMP scan: %d hosts\n", pingAliveCount)
+	o.log("ICMP scan: %d hosts\n", pingAliveCount)
 
 	tcpAliveCount := 0
 	for _, host := range tcpScannedHosts {
@@ -574,7 +586,7 @@ func (o *Orchestrator) printScanSummary(passiveHostCount, arpAliveCount int, pin
 	if tcpOnlyCount < 0 {
 		tcpOnlyCount = 0
 	}
-	fmt.Printf("TCP scan: %d additional hosts\n", tcpOnlyCount)
+	o.log("TCP scan: %d additional hosts\n", tcpOnlyCount)
 
 	activeCount := 0
 	for _, host := range activeScannedHosts {
@@ -587,16 +599,16 @@ func (o *Orchestrator) printScanSummary(passiveHostCount, arpAliveCount int, pin
 	if synOnlyCount < 0 {
 		synOnlyCount = 0
 	}
-	fmt.Printf("SYN scan: %d additional hosts\n", synOnlyCount)
+	o.log("SYN scan: %d additional hosts\n", synOnlyCount)
 
 	passiveOnlyCount := aliveCount - activeCount
 	if passiveOnlyCount < 0 {
 		passiveOnlyCount = 0
 	}
-	fmt.Printf("Unique passive-only hosts: %d\n\n", passiveOnlyCount)
+	o.log("Unique passive-only hosts: %d\n\n", passiveOnlyCount)
 
-	fmt.Printf("%-15s %-17s %-10s\n", "IP Address", "MAC Address", "Status")
-	fmt.Printf("%-15s %-17s %-10s\n", "---------------", "-----------------", "----------")
+	o.log("%-15s %-17s %-10s\n", "IP Address", "MAC Address", "Status")
+	o.log("%-15s %-17s %-10s\n", "---------------", "-----------------", "----------")
 
 	sort.Slice(finalHosts, func(i, j int) bool {
 		ipA := net.ParseIP(finalHosts[i].IPAddress).To4()
@@ -614,18 +626,18 @@ func (o *Orchestrator) printScanSummary(passiveHostCount, arpAliveCount int, pin
 
 	for _, host := range finalHosts {
 		if host.IsAlive {
-			fmt.Printf("%-15s %-17s %-10s\n", host.IPAddress, host.MACAddress, "Alive")
+			o.log("%-15s %-17s %-10s\n", host.IPAddress, host.MACAddress, "Alive")
 		}
 	}
 
-	fmt.Println("\nShow dead hosts? (y/n):")
+	o.log("\nShow dead hosts? (y/n):\n")
 	var input string
 	fmt.Scanln(&input)
 
 	if strings.ToLower(input) == "y" {
 		for _, host := range finalHosts {
 			if !host.IsAlive {
-				fmt.Printf("%-15s %-17s %-10s\n", host.IPAddress, host.MACAddress, "Dead")
+				o.log("%-15s %-17s %-10s\n", host.IPAddress, host.MACAddress, "Dead")
 			}
 		}
 	}

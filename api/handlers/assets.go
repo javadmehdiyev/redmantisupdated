@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 
@@ -120,6 +122,42 @@ func (h *AssetHandler) GetAssets(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func (h *AssetHandler) GetAssetLogs(c *gin.Context) {
+	logsData, err := os.ReadFile("../scan_logs.json")
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.ErrorResponse{Message: "scan logs not found"})
+		return
+	}
+
+	var logEntries []struct {
+		StartTime string   `json:"start_time"`
+		EndTime   string   `json:"end_time"`
+		Messages  []string `json:"messages"`
+	}
+
+	// Try to parse as array first
+	if err := json.Unmarshal(logsData, &logEntries); err != nil {
+		// Try to parse as single entry (old format for backward compatibility)
+		var singleEntry struct {
+			StartTime string   `json:"start_time"`
+			EndTime   string   `json:"end_time"`
+			Messages  []string `json:"messages"`
+		}
+		if err2 := json.Unmarshal(logsData, &singleEntry); err2 != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Message: "failed to parse log file"})
+			return
+		}
+		// Convert single entry to array
+		logEntries = []struct {
+			StartTime string   `json:"start_time"`
+			EndTime   string   `json:"end_time"`
+			Messages  []string `json:"messages"`
+		}{singleEntry}
+	}
+
+	c.JSON(http.StatusOK, logEntries)
 }
 
 // GetAssetByIP handles the GET /assets/:ip endpoint
