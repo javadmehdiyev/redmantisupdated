@@ -1,56 +1,56 @@
 # RedMantis Nuclei Scanner
 
-Отдельный модуль для сканирования уязвимостей с помощью Nuclei на основе результатов RedMantis.
+A separate module for vulnerability scanning using Nuclei based on RedMantis results.
 
-## Описание
+## Description
 
-Этот модуль:
-- ✅ Читает `assets.json` (результаты RedMantis)
-- ✅ Извлекает веб-сервисы (HTTP/HTTPS)
-- ✅ Запускает Nuclei сканирование
-- ✅ Объединяет результаты с исходными активами
-- ✅ Сохраняет в `nuclei_assets.json` (не изменяет `assets.json`)
+This module:
+- ✅ Reads `assets.json` (RedMantis results)
+- ✅ Extracts web services (HTTP/HTTPS)
+- ✅ Runs Nuclei scanning
+- ✅ Merges results with original assets
+- ✅ Saves to `nuclei_assets.json` (does not modify `assets.json`)
 
-## Требования
+## Requirements
 
-1. **Nuclei должен быть установлен**:
+1. **Nuclei must be installed**:
    ```bash
    go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
    nuclei -update-templates
    ```
 
-2. **Файл `assets.json`** должен существовать (создается RedMantis сканером)
+2. **File `assets.json`** must exist (created by RedMantis scanner)
 
-## Использование
+## Usage
 
-### Сборка
+### Building
 
 ```bash
 cd cmd/nuclei-scanner
 go build -o nuclei-scanner .
 ```
 
-Или из корня проекта:
+Or from the project root:
 
 ```bash
 go build -o nuclei-scanner ./cmd/nuclei-scanner
 ```
 
-### Запуск
+### Running
 
 ```bash
 ./nuclei-scanner
 ```
 
-Или из корня проекта:
+Or from the project root:
 
 ```bash
 ./nuclei-scanner
 ```
 
-## Конфигурация
+## Configuration
 
-Модуль использует настройки из `config.json`:
+The module uses settings from `config.json`:
 
 ```json
 {
@@ -64,11 +64,11 @@ go build -o nuclei-scanner ./cmd/nuclei-scanner
 }
 ```
 
-**Важно**: Если `nuclei.enabled` установлен в `false`, модуль завершится с сообщением.
+**Important**: If `nuclei.enabled` is set to `false`, the module will exit with a message.
 
-## Выходные данные
+## Output
 
-Результаты сохраняются в `nuclei_assets.json` в формате:
+Results are saved to `nuclei_assets.json` in the following format:
 
 ```json
 [
@@ -91,32 +91,29 @@ go build -o nuclei-scanner ./cmd/nuclei-scanner
 ]
 ```
 
-## Пример использования
+## Usage Example
 
 ```bash
-# 1. Запустить RedMantis сканер
+# 1. Run RedMantis scanner
 sudo ./redmantis
 
-# 2. Запустить Nuclei сканер
+# 2. Run Nuclei scanner
 ./nuclei-scanner
 
-# 3. Просмотреть результаты
+# 3. View results
 cat nuclei_assets.json | jq '.[] | select(.nuclei_vulnerabilities != null)'
 ```
 
-## Статистика
+## Statistics
 
-После завершения сканирования модуль выводит:
-- Общее количество активов
-- Количество активов с уязвимостями
-- Общее количество найденных уязвимостей
-- Распределение по уровням серьезности
+After scanning completes, the module outputs:
+- Total number of assets
+- Number of assets with vulnerabilities
+- Total number of vulnerabilities found
+- Distribution by severity levels
 
-## Примечания
+## Notes
 
-- Модуль **не изменяет** исходный файл `assets.json`
-- Результаты Nuclei добавляются в новое поле `nuclei_vulnerabilities`
-- Если у актива нет уязвимостей, поле `nuclei_vulnerabilities` будет отсутствовать (или пустым)
-
-
-
+- The module **does not modify** the original `assets.json` file
+- Nuclei results are added to a new field `nuclei_vulnerabilities`
+- If an asset has no vulnerabilities, the `nuclei_vulnerabilities` field will be absent (or empty)
