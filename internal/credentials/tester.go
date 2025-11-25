@@ -165,12 +165,12 @@ func (t *CredentialTester) identifyService(port int, serviceName string) string 
 	if strings.Contains(serviceLower, "telnet") {
 		return "telnet"
 	}
-	if strings.Contains(serviceLower, "http") {
-		if port == 443 || port == 8443 {
-			return "https"
-		}
-		return "http"
-	}
+	//if strings.Contains(serviceLower, "http") {
+	//	if port == 443 || port == 8443 {
+	//		return "https"
+	//	}
+	//	return "http"
+	//}
 
 	// Fallback to port-based detection
 	portServiceMap := map[int]string{
@@ -209,10 +209,10 @@ func (t *CredentialTester) testService(ip string, port int, service string, cred
 		return TestMySQL(ip, port, creds, t.timeout)
 	case "postgresql":
 		return TestPostgreSQL(ip, port, creds, t.timeout)
-	case "http":
-		return TestHTTP(ip, port, creds, t.timeout, false)
-	case "https":
-		return TestHTTP(ip, port, creds, t.timeout, true)
+	//case "http":
+	//	return TestHTTP(ip, port, creds, t.timeout, false)
+	//case "https":
+	//	return TestHTTP(ip, port, creds, t.timeout, true)
 	case "telnet":
 		return TestTelnet(ip, port, creds, t.timeout)
 	case "smb":
