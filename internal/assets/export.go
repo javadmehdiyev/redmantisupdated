@@ -56,3 +56,18 @@ func LoadFromJSON(filename string) ([]Asset, error) {
 
 	return assets, nil
 }
+
+// LoadNucleiFromJSON loads nuclei assets from JSON file
+func LoadNucleiFromJSON(filename string) ([]NucleiAsset, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %s: %w", filename, err)
+	}
+
+	var nucleiAssets []NucleiAsset
+	if err := json.Unmarshal(data, &nucleiAssets); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	return nucleiAssets, nil
+}

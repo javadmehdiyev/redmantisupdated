@@ -30,6 +30,21 @@ type AssetListResponse struct {
 	Data        []AssetResponse `json:"data" description:"List of assets for the current page"`
 }
 
+// NucleiAssetResponse represents a nuclei-enriched asset in API responses
+type NucleiAssetResponse struct {
+	AssetResponse
+	NucleiVulnerabilities []assets.NucleiPortScanResult `json:"nuclei_vulnerabilities" description:"List of detected nuclei vulnerabilities"`
+}
+
+// NucleiAssetListResponse represents a paginated list of nuclei assets
+type NucleiAssetListResponse struct {
+	TotalAssets int                   `json:"total_assets" example:"21" description:"Total number of assets"`
+	CurrentPage int                   `json:"current_page" example:"1" description:"Current page number"`
+	PageSize    int                   `json:"page_size" example:"10" description:"Number of assets per page"`
+	TotalPages  int                   `json:"total_pages" example:"3" description:"Total number of pages"`
+	Data        []NucleiAssetResponse `json:"data" description:"List of nuclei assets for the current page"`
+}
+
 // ErrorResponse represents an error response
 type ErrorResponse struct {
 	Message string `json:"message" example:"Asset not found" description:"Error message"`
@@ -57,6 +72,35 @@ func ConvertAssets(assetList []assets.Asset) []AssetResponse {
 	responses := make([]AssetResponse, len(assetList))
 	for i, asset := range assetList {
 		responses[i] = ConvertAsset(asset)
+	}
+	return responses
+}
+
+// ConvertNucleiAsset converts internal NucleiAsset to API NucleiAssetResponse
+func ConvertNucleiAsset(asset assets.NucleiAsset) NucleiAssetResponse {
+	return NucleiAssetResponse{
+		AssetResponse: AssetResponse{
+			Address:         asset.Address,
+			Hostname:        asset.Hostname,
+			Os:              asset.OS,
+			Type:            asset.Type,
+			Hardware:        asset.Hardware,
+			MacVendor:       asset.MacVendor,
+			Mac:             asset.Mac,
+			Screenshot:      asset.Screenshot,
+			Date:            asset.Date,
+			Ports:           asset.Ports,
+			CredentialTests: asset.CredTest,
+		},
+		NucleiVulnerabilities: asset.NucleiVulnerabilities,
+	}
+}
+
+// ConvertNucleiAssets converts slice of internal NucleiAssets to API NucleiAssetResponses
+func ConvertNucleiAssets(assetList []assets.NucleiAsset) []NucleiAssetResponse {
+	responses := make([]NucleiAssetResponse, len(assetList))
+	for i, asset := range assetList {
+		responses[i] = ConvertNucleiAsset(asset)
 	}
 	return responses
 }

@@ -30,12 +30,16 @@ import (
 func main() {
 	// Initialize handlers
 	assetHandler := handlers.NewAssetHandler()
+	nucleiAssetHandler := handlers.NewNucleiAssetHandler()
 
 	// Setup Gin router
 	r := gin.Default()
 
 	// Swagger endpoint
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// Nuclei endpoints
+	r.GET("/nuclei-assets", nucleiAssetHandler.GetNucleiAssets)
 
 	// Asset endpoints
 	r.GET("/assets", assetHandler.GetAssets)
