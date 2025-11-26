@@ -9,15 +9,11 @@ import (
 	"redmantis/internal/assets"
 )
 
-// CommonPorts - Comprehensive deduplicated port list covering most common services
-// Organized by category for better coverage
 var CommonPorts = getDeduplicatedPorts()
 
-// getDeduplicatedPorts returns a deduplicated list of ports to scan
 func getDeduplicatedPorts() []int {
-	// Build comprehensive port list organized by category
+
 	allPorts := []int{
-		// Remote Access & Management (Critical)
 		22,   // SSH
 		23,   // Telnet
 		3389, // RDP
@@ -26,7 +22,6 @@ func getDeduplicatedPorts() []int {
 		5985, // WinRM HTTP
 		5986, // WinRM HTTPS
 
-		// Web Services (Very Common)
 		80,   // HTTP
 		443,  // HTTPS
 		8000, // HTTP-alt

@@ -248,7 +248,11 @@ func TestTelnet(ip string, port int, creds []Credential, timeout time.Duration) 
 			// Check for success indicators (shell prompt, etc.)
 			if !strings.Contains(response, "Login incorrect") &&
 				!strings.Contains(response, "Authentication failed") &&
-				!strings.Contains(response, "Access denied") {
+				!strings.Contains(response, "Access denied") &&
+				!strings.Contains(response, "Username or password incorrect!") &&
+				!strings.Contains(response, "Bad login") &&
+				!strings.Contains(response, "Connection closed by remote host") &&
+				!strings.Contains(response, "Password:") {
 				results = append(results, assets.CredentialTest{
 					Service:  "telnet",
 					Port:     port,
