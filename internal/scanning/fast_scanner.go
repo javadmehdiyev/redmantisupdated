@@ -110,7 +110,7 @@ func (ps *PortScanner) grabBanner(conn net.Conn, port int) (string, string) {
 		banner = ps.readBanner(conn, 1024)
 		service = ps.identifyMailService(port, banner)
 
-	case 80, 8080, 8000, 8888, 9000: // HTTP
+	case 80, 8080, 8000, 8081, 8888, 9000: // HTTP
 		banner = ps.grabHTTPBanner(conn)
 		service = ps.identifyHTTP(banner)
 
