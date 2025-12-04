@@ -29,6 +29,7 @@ import (
 
 func main() {
 	// Initialize handlers
+	antivirusHandler := handlers.NewAntivirusHandler()
 	assetHandler := handlers.NewAssetHandler()
 
 	// Setup Gin router
@@ -40,6 +41,8 @@ func main() {
 	// Asset endpoints
 	r.GET("/assets", assetHandler.GetAssets)
 	r.GET("/assets/:ip", assetHandler.GetAssetByIP)
+
+	r.POST("antivirus/load-data", antivirusHandler.LoadData)
 
 	// Start server
 	r.Run(":8080")
