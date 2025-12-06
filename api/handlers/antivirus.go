@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"os"
+
+	"github.com/gin-gonic/gin"
 )
 
 type AntivirusHandler struct {
@@ -14,6 +15,34 @@ func NewAntivirusHandler() *AntivirusHandler {
 	handler := &AntivirusHandler{}
 	return handler
 }
+
+func (h *AntivirusHandler) CheckData(c *gin.Context) {
+	fileName := c.Query("file")
+	if fileName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file parameter is required"})
+		return
+	}
+
+	filePath := "./uploads/" + fileName
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.JSON(http.StatusOK, gin.H{
+			"exists":   false,
+			"message":  "file not found",
+			"filename": fileName,
+		})
+		return // <-- ОБЯЗАТЕЛЬНО!
+	}
+
+	// Если сюда дошло — файл существует
+	c.JSON(http.StatusOK, gin.H{
+		"exists":   true,
+		"message":  "file exists",
+		"filename": fileName,
+	})
+}
+
 func (h *AntivirusHandler) LoadData(c *gin.Context) {
 	fileName := c.PostForm("file_name")
 	if fileName == "" {

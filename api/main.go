@@ -43,7 +43,9 @@ func main() {
 	r.GET("/assets/:ip", assetHandler.GetAssetByIP)
 
 	r.POST("antivirus/load-data", antivirusHandler.LoadData)
+	r.GET("/antivirus/check-data", antivirusHandler.CheckData)
 
 	// Start server
-	r.Run(":8080")
+	//r.Run(":8080")
+	r.Run("0.0.0.0:8080")
 }
